@@ -154,8 +154,8 @@ function getAudioContext(): AudioContext {
   // it, nothing came out. resume() is a no-op on a running context, so it is
   // called every time; the warning makes the next occurrence self-diagnosing.
   if (sharedAudioCtx.state === "suspended") {
-    console.warn("[luna] AudioContext was suspended; resuming before playback");
-    sharedAudioCtx.resume().catch((err) => console.error("[luna] AudioContext resume failed", err));
+    console.warn("[yuri] AudioContext was suspended; resuming before playback");
+    sharedAudioCtx.resume().catch((err) => console.error("[yuri] AudioContext resume failed", err));
   }
   return sharedAudioCtx;
 }
@@ -216,7 +216,7 @@ export function speakWithLipsync(audioUrl: string): SpeakHandle {
   currentMouthDriver = getMouthOpen;
   currentSpeechEl = audioEl;
   audioEl.addEventListener("ended", onEnded);
-  audioEl.play().catch((err) => console.error("[luna] audio playback failed", err));
+  audioEl.play().catch((err) => console.error("[yuri] audio playback failed", err));
 
   return {
     onFinish(cb) {

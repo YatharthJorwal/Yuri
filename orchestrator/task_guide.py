@@ -174,13 +174,13 @@ async def check_task_progress(task_description: str, image_b64: str) -> dict | N
     try:
         raw_output = await llm.describe_image(prompt, image_b64, json_schema=CHECK_SCHEMA)
     except llm.LLMUnreachableError as exc:
-        print(f"[luna] task guide: vision call failed ({type(exc).__name__}): {exc}", file=sys.stderr)
+        print(f"[yuri] task guide: vision call failed ({type(exc).__name__}): {exc}", file=sys.stderr)
         return None
     result = _parse_check_result(raw_output)
     if result is None:
         # The raw text is the only way to tell "the model wrote prose" from
         # "the model wrote JSON with the wrong shape" -- it used to be dropped.
-        print(f"[luna] task guide: unparseable check output: {raw_output[:300]!r}", file=sys.stderr)
+        print(f"[yuri] task guide: unparseable check output: {raw_output[:300]!r}", file=sys.stderr)
     return result
 
 
@@ -301,7 +301,7 @@ async def maybe_update_task(user_text: str) -> str | None:
         async for delta in llm.stream_reply(messages):
             raw_output += delta
     except llm.LLMUnreachableError as exc:
-        print(f"[luna] task guide: detection LLM unreachable, skipping: {exc}", file=sys.stderr)
+        print(f"[yuri] task guide: detection LLM unreachable, skipping: {exc}", file=sys.stderr)
         return None
 
     parsed = _parse_task_detection(raw_output)
@@ -311,7 +311,7 @@ async def maybe_update_task(user_text: str) -> str | None:
     if parsed["action"] == "start":
         description = parsed["description"] or "an unspecified task"
         set_active_task(True, description)
-        print(f"[luna] task guide: detected task start -> '{description}'", file=sys.stderr)
+        print(f"[yuri] task guide: detected task start -> '{description}'", file=sys.stderr)
         return (
             f"The user just described a task, and it is now being "
             f"tracked: {description!r}. You do not need to explicitly "
@@ -323,7 +323,7 @@ async def maybe_update_task(user_text: str) -> str | None:
     if not get_state().active:
         return None
     set_active_task(False)
-    print("[luna] task guide: detected task stop", file=sys.stderr)
+    print("[yuri] task guide: detected task stop", file=sys.stderr)
     return (
         "The user just indicated the task you were tracking is done, "
         "dropped, or paused, and tracking has been stopped. React "

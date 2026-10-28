@@ -134,14 +134,14 @@ fn install_kill_on_close_job() {
     match result {
         Ok(job) => {
             eprintln!(
-                "[luna] kill-on-close job object ACTIVE -- Windows will kill \
+                "[yuri] kill-on-close job object ACTIVE -- Windows will kill \
                  GPT-SoVITS and the orchestrator if Luna dies for any reason \
                  (End Task, Ctrl+C, crash, tray Quit)."
             );
             std::mem::forget(job);
         }
         Err(e) => eprintln!(
-            "[luna] WARNING: couldn't set up the kill-on-close job object ({e}); \
+            "[yuri] WARNING: couldn't set up the kill-on-close job object ({e}); \
              children may be orphaned if Luna is closed via End Task or Ctrl+C \
              instead of tray Quit."
         ),
@@ -323,7 +323,7 @@ fn spawn_backend_processes(children: Arc<Mutex<Vec<(String, Child)>>>) {
         spawn_logged("GPT-SoVITS", &mut cmd, &logs_dir.join("gpt_sovits.log"), &children);
     } else {
         eprintln!(
-            "[luna] GPT_SOVITS_DIR not set in src-tauri/launcher.local.txt -- \
+            "[yuri] GPT_SOVITS_DIR not set in src-tauri/launcher.local.txt -- \
              skipping GPT-SoVITS auto-start, voice will fall back to pyttsx3 \
              (see launcher.local.txt.example)."
         );
@@ -366,7 +366,7 @@ fn spawn_backend_processes(children: Arc<Mutex<Vec<(String, Child)>>>) {
         };
         if !gpt_sovits_still_alive {
             eprintln!(
-                "[luna] WARNING: port 9880 answered, but the GPT-SoVITS \
+                "[yuri] WARNING: port 9880 answered, but the GPT-SoVITS \
                  process this launch just started has already exited -- \
                  something ELSE is squatting that port, almost certainly \
                  a leftover process from a previous session that never \
@@ -381,11 +381,14 @@ fn spawn_backend_processes(children: Arc<Mutex<Vec<(String, Child)>>>) {
             );
         }
 
-        let python = PathBuf::from("../orchestrator/venv/Scripts/python.exe");
+        // Yuri keeps its virtualenv at the repo root (.venv), not inside
+        // orchestrator/ like Luna did -- one environment for the whole repo.
+        let python = PathBuf::from("../.venv/Scripts/python.exe");
         if !python.exists() {
             eprintln!(
-                "[luna] {} not found -- orchestrator venv not set up yet? \
-                 Run `pip install -r requirements.txt` in orchestrator/venv \
+                "[yuri] {} not found -- the Python venv is not set up yet. \
+                 Run `python -m venv .venv` and `pip install -r \
+                 orchestrator/requirements-dev.txt` from the repo root \
                  first (see README).",
                 python.display()
             );
@@ -451,7 +454,7 @@ fn kill_stale_listeners(port: u16, what: &str) {
         Ok(o) => o,
         Err(e) => {
             eprintln!(
-                "[luna] startup sweep: couldn't run netstat ({e}); not checking port {port} ({what})"
+                "[yuri] startup sweep: couldn't run netstat ({e}); not checking port {port} ({what})"
             );
             return;
         }
@@ -479,7 +482,7 @@ fn kill_stale_listeners(port: u16, what: &str) {
         }
         if !is_python_process(pid) {
             eprintln!(
-                "[luna] startup sweep: port {port} ({what}) is held by pid {pid}, which isn't a \
+                "[yuri] startup sweep: port {port} ({what}) is held by pid {pid}, which isn't a \
                  Python process -- leaving it alone. Free that port yourself or the {what} \
                  won't be able to start."
             );
@@ -493,12 +496,12 @@ fn kill_stale_listeners(port: u16, what: &str) {
             Ok(o) if o.status.success() => {
                 killed_any = true;
                 eprintln!(
-                    "[luna] startup sweep: killed stale python process (pid {pid}) still \
+                    "[yuri] startup sweep: killed stale python process (pid {pid}) still \
                      listening on port {port} ({what}) from a previous run."
                 );
             }
             _ => eprintln!(
-                "[luna] startup sweep: tried to kill stale python pid {pid} on port {port} \
+                "[yuri] startup sweep: tried to kill stale python pid {pid} on port {port} \
                  ({what}) but taskkill failed -- kill it manually."
             ),
         }
@@ -529,7 +532,7 @@ fn wait_for_port(port: u16, max_wait: Duration) {
         std::thread::sleep(Duration::from_millis(500));
     }
     eprintln!(
-        "[luna] nothing answered on port {port} within {}s -- starting the \
+        "[yuri] nothing answered on port {port} within {}s -- starting the \
          orchestrator anyway.",
         max_wait.as_secs()
     );
@@ -550,14 +553,14 @@ fn spawn_logged(
     let stdout_file = match std::fs::File::create(log_path) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("[luna] couldn't open {}: {e}", log_path.display());
+            eprintln!("[yuri] couldn't open {}: {e}", log_path.display());
             return;
         }
     };
     let stderr_file = match stdout_file.try_clone() {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("[luna] couldn't duplicate the log handle for {label}: {e}");
+            eprintln!("[yuri] couldn't duplicate the log handle for {label}: {e}");
             return;
         }
     };
@@ -573,7 +576,7 @@ fn spawn_logged(
                 children.push((label.to_string(), child));
             }
         }
-        Err(e) => eprintln!("[luna] failed to start {label}: {e}"),
+        Err(e) => eprintln!("[yuri] failed to start {label}: {e}"),
     }
 }
 

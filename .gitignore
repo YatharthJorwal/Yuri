@@ -40,3 +40,6 @@ orchestrator/config.yaml
 # TypeScript build info
 *.tsbuildinfo
 
+
+# Local launcher paths (see src-tauri/launcher.local.txt.example)
+src-tauri/launcher.local.txt

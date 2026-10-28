@@ -76,7 +76,7 @@ async def _synthesize_gpt_sovits(text: str) -> bytes:
             response = await client.post(cfg.api_url, json=payload)
             content_type = response.headers.get("content-type", "")
             print(
-                f"[luna] gpt_sovits response: {response.status_code}, "
+                f"[yuri] gpt_sovits response: {response.status_code}, "
                 f"content-type={content_type!r}, {len(response.content)} bytes",
                 file=sys.stderr,
             )
@@ -98,7 +98,7 @@ async def _synthesize_gpt_sovits(text: str) -> bytes:
                 raise TTSUnreachableError(f"empty response body from {cfg.api_url}")
             if "audio" not in content_type.lower():
                 body_preview = response.text[:1000]
-                print(f"[luna] gpt_sovits non-audio body: {body_preview!r}", file=sys.stderr)
+                print(f"[yuri] gpt_sovits non-audio body: {body_preview!r}", file=sys.stderr)
                 raise TTSUnreachableError(
                     f"expected audio from {cfg.api_url}, got content-type "
                     f"{content_type!r}: {body_preview[:300]!r}"
@@ -122,6 +122,6 @@ async def synthesize(text: str) -> bytes:
             # meant "wrong voice came out" had no visible cause anywhere --
             # printing it here is the whole difference between "check the
             # terminal" and "guess blindly."
-            print(f"[luna] gpt_sovits unreachable, falling back to pyttsx3: {exc}", file=sys.stderr)
+            print(f"[yuri] gpt_sovits unreachable, falling back to pyttsx3: {exc}", file=sys.stderr)
 
     return await asyncio.to_thread(_synthesize_pyttsx3_sync, text)

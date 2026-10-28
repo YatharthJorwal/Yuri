@@ -90,7 +90,7 @@ async def consolidate_session(history: list[dict[str, str]]) -> None:
         async for delta in llm.stream_reply(consolidation_messages):
             raw_output += delta
     except llm.LLMUnreachableError as exc:
-        print(f"[luna] consolidation: LLM unreachable, session's memory is lost: {exc}", file=sys.stderr)
+        print(f"[yuri] consolidation: LLM unreachable, session's memory is lost: {exc}", file=sys.stderr)
         return
 
     facts, episode_summary = _parse_consolidation_output(raw_output)
@@ -99,7 +99,7 @@ async def consolidate_session(history: list[dict[str, str]]) -> None:
         for fact in facts:
             store.add_fact(fact)
     except MemoryUnavailableError as exc:
-        print(f"[luna] consolidation: couldn't write facts: {exc}", file=sys.stderr)
+        print(f"[yuri] consolidation: couldn't write facts: {exc}", file=sys.stderr)
 
     if not episode_summary:
         return
@@ -108,7 +108,7 @@ async def consolidate_session(history: list[dict[str, str]]) -> None:
         embedding = await embed(episode_summary)
     except EmbeddingUnreachableError as exc:
         print(
-            f"[luna] consolidation: embedding unavailable, episode summary "
+            f"[yuri] consolidation: embedding unavailable, episode summary "
             f"not stored (facts above were still written if any): {exc}",
             file=sys.stderr,
         )
@@ -117,7 +117,7 @@ async def consolidate_session(history: list[dict[str, str]]) -> None:
     try:
         store.add_episode(episode_summary, embedding)
     except MemoryUnavailableError as exc:
-        print(f"[luna] consolidation: couldn't write episode: {exc}", file=sys.stderr)
+        print(f"[yuri] consolidation: couldn't write episode: {exc}", file=sys.stderr)
 
 
 def _format_transcript(turns: list[dict[str, str]]) -> str:
@@ -156,7 +156,7 @@ def _parse_consolidation_output(raw_output: str) -> tuple[list[str], str]:
         return facts, summary
 
     print(
-        f"[luna] consolidation: model output didn't parse as the expected "
+        f"[yuri] consolidation: model output didn't parse as the expected "
         f"JSON shape, falling back to storing it as a raw episode summary: "
         f"{raw_output[:300]!r}",
         file=sys.stderr,

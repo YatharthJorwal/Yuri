@@ -69,7 +69,7 @@ export function buildVrmReport(vrm: VRM): VrmReport {
   const custom = exprNames.filter((n) => !preset.includes(n));
 
   const lines = [
-    `[luna] VRM report -- ${name} (VRM spec ${specVersion})`,
+    `[yuri] VRM report -- ${name} (VRM spec ${specVersion})`,
     `  expressions (${exprNames.length}): ${exprNames.join(", ") || "none"}`,
     `  custom expressions: ${custom.join(", ") || "none"}`,
     `  standard presets NOT present: ${missingPresets.join(", ") || "none"}`,
@@ -96,6 +96,6 @@ export function logVrmReport(vrm: VRM): void {
     console.log(report.text);
     (window as unknown as { __lunaVrmReport?: VrmReport }).__lunaVrmReport = report;
   } catch (err) {
-    console.warn("[luna] VRM report failed (harmless):", err);
+    console.warn("[yuri] VRM report failed (harmless):", err);
   }
 }

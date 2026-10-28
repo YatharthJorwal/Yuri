@@ -268,7 +268,7 @@ async def stream_reply_with_tools(
                             payload.pop("tools", None)
                             tool_names = []
                             print(
-                                f"[luna] WARNING: '{CONFIG.llm.model}' doesn't support tool-calling "
+                                f"[yuri] WARNING: '{CONFIG.llm.model}' doesn't support tool-calling "
                                 "(Ollama said so); retrying this turn without tools and not "
                                 "offering them again. Look/camera requests still work via the "
                                 "regex gate.",
@@ -292,7 +292,7 @@ async def stream_reply_with_tools(
                             calls = _normalize_tool_calls(message.get("tool_calls"))
                             if calls:
                                 print(
-                                    f"[luna] tool-calling: model called "
+                                    f"[yuri] tool-calling: model called "
                                     f"{[c['name'] for c in calls]}",
                                     file=sys.stderr,
                                 )
@@ -318,7 +318,7 @@ async def stream_reply_with_tools(
     raw_estimate = context_budget.estimate_prompt(messages, sent_tools)
     context_budget.observe(raw_estimate, prompt_tokens)
     print(
-        f"[luna] tool-calling: offered {tool_names}, replied directly "
+        f"[yuri] tool-calling: offered {tool_names}, replied directly "
         f"(saw_content={saw_any_content}, "
         f"'tool_calls' key ever present={saw_tool_calls_key}, "
         f"done={done_seen}, done_reason={done_reason!r}, chars={chars_streamed}, "
@@ -329,7 +329,7 @@ async def stream_reply_with_tools(
     )
     if done_reason == "length":
         print(
-            "[luna] WARNING: reply stopped by 'length' -- "
+            "[yuri] WARNING: reply stopped by 'length' -- "
             f"{explain_length_stop(prompt_tokens, gen_tokens)}",
             file=sys.stderr,
         )
@@ -339,7 +339,7 @@ async def stream_reply_with_tools(
         and prompt_tokens >= CONFIG.llm.num_ctx * 0.85
     ):
         print(
-            f"[luna] WARNING: context nearly full (prompt {prompt_tokens} of "
+            f"[yuri] WARNING: context nearly full (prompt {prompt_tokens} of "
             f"num_ctx {CONFIG.llm.num_ctx}) -- the next reply may be cut short.",
             file=sys.stderr,
         )
@@ -350,7 +350,7 @@ async def stream_reply_with_tools(
         # or it ended for a reason other than a natural stop (e.g.
         # "length" = hit the max_tokens cap).
         print(
-            f"[luna] WARNING: LLM reply ended abnormally (done={done_seen}, "
+            f"[yuri] WARNING: LLM reply ended abnormally (done={done_seen}, "
             f"done_reason={done_reason!r}) after {chars_streamed} chars -- "
             "if she cut off mid-sentence, this is why.",
             file=sys.stderr,
@@ -387,7 +387,7 @@ def _vision_timing_summary(model: str, image_b64: str, elapsed_s: float, data: d
         return f"{value / 1e9:.1f}s" if isinstance(value, (int, float)) else "?"
 
     return (
-        f"[luna] vision: model={model} image={len(image_b64) // 1024}KB total={elapsed_s:.1f}s "
+        f"[yuri] vision: model={model} image={len(image_b64) // 1024}KB total={elapsed_s:.1f}s "
         f"load={secs('load_duration')} prompt_tokens={data.get('prompt_eval_count')} "
         f"prompt_eval={secs('prompt_eval_duration')} gen_tokens={data.get('eval_count')} "
         f"gen={secs('eval_duration')}"
@@ -466,17 +466,17 @@ async def warm_up_model() -> None:
             response = await client.post(url, json=payload)
         if response.status_code >= 400:
             print(
-                f"[luna] warm-up: {response.status_code} from {url}: {response.text[:300]!r}",
+                f"[yuri] warm-up: {response.status_code} from {url}: {response.text[:300]!r}",
                 file=sys.stderr,
             )
             return
         print(
-            f"[luna] warm-up: '{CONFIG.llm.model}' loaded in {time.monotonic() - started:.1f}s "
+            f"[yuri] warm-up: '{CONFIG.llm.model}' loaded in {time.monotonic() - started:.1f}s "
             f"(num_ctx {CONFIG.llm.num_ctx})",
             file=sys.stderr,
         )
     except Exception as exc:  # noqa: BLE001 -- best-effort; the first real turn will surface a real problem
-        print(f"[luna] warm-up skipped: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"[yuri] warm-up skipped: {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
 async def report_model_capabilities() -> None:
@@ -489,14 +489,14 @@ async def report_model_capabilities() -> None:
         chat_caps = await model_capabilities(chat)
         vision_caps = chat_caps if vision == chat else await model_capabilities(vision)
         print(
-            f"[luna] model capabilities: chat '{chat}' = {chat_caps if chat_caps is not None else 'unknown'}"
+            f"[yuri] model capabilities: chat '{chat}' = {chat_caps if chat_caps is not None else 'unknown'}"
             + ("" if vision == chat else f"; vision '{vision}' = {vision_caps if vision_caps is not None else 'unknown'}"),
             file=sys.stderr,
         )
         for warning in capability_warnings(chat, chat_caps, vision, vision_caps):
-            print(f"[luna] WARNING: {warning}", file=sys.stderr)
+            print(f"[yuri] WARNING: {warning}", file=sys.stderr)
     except Exception as exc:  # noqa: BLE001 -- diagnostics must never stop startup
-        print(f"[luna] model capability check skipped: {exc}", file=sys.stderr)
+        print(f"[yuri] model capability check skipped: {exc}", file=sys.stderr)
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -552,7 +552,7 @@ async def describe_image(
     Uses llm.vision_model when set, else llm.model (see vision_model_name).
     Every image path -- screen looks, Continuous OCR, Task Guide, camera,
     image uploads -- goes through here; the main chat model never receives
-    pixels, so it can be a text-only model. Logs a `[luna] vision:` timing
+    pixels, so it can be a text-only model. Logs a `[yuri] vision:` timing
     line per call (model, image size, load / prompt-eval / generation time).
 
     json_schema: when given (the Task Guide and Continuous OCR checks, which
@@ -604,7 +604,7 @@ async def describe_image(
                     # reported below as itself.
                     _NO_FORMAT_MODELS.add(model)
                     print(
-                        f"[luna] WARNING: '{model}' rejected the structured-output schema "
+                        f"[yuri] WARNING: '{model}' rejected the structured-output schema "
                         f"({first_error}); it worked without it, so the schema won't be sent "
                         "again. The prompt alone has to produce the JSON.",
                         file=sys.stderr,

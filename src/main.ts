@@ -205,7 +205,7 @@ async function boot(): Promise<void> {
     // required by the spec), but fall back to a reasonable guess rather
     // than crash boot() over a malformed file.
     headWorldPosition.set(0, 1.4, 0);
-    console.warn("[luna] VRM has no head bone in its humanoid map -- using a fallback camera position");
+    console.warn("[yuri] VRM has no head bone in its humanoid map -- using a fallback camera position");
   }
   camera.position.set(
     headWorldPosition.x,
@@ -973,7 +973,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
       // Most likely mic permission denied, or no input device -- nothing
       // client-side to recover from beyond logging; the user can grant
       // permission (or plug in a mic) and click again.
-      console.error("[luna] mic capture failed -- check mic permission", err);
+      console.error("[yuri] mic capture failed -- check mic permission", err);
     },
   });
   micButton.addEventListener("click", () => {
@@ -995,7 +995,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
       // -- nothing client-side to recover from beyond logging; same
       // shape as the mic's own onError above. Badge stays "Off" since
       // arm() never actually completed.
-      console.error("[luna] camera access failed -- check camera permission", err);
+      console.error("[yuri] camera access failed -- check camera permission", err);
     },
   });
   qaCameraButton.addEventListener("click", () => {
@@ -1044,7 +1044,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
     try {
       content = classified.kind === "image" ? await resizeImageToBase64Jpeg(file) : await readTextFile(file);
     } catch (err) {
-      console.error("[luna] failed to read uploaded file", err);
+      console.error("[yuri] failed to read uploaded file", err);
       flashPlaceholder("Couldn't read that file -- try a different one?");
       return;
     }
@@ -1070,7 +1070,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
       mic.stop();
     }
   }).catch((err) => {
-    console.error("[luna] couldn't attach F9 push-to-talk listener", err);
+    console.error("[yuri] couldn't attach F9 push-to-talk listener", err);
   });
 
   return {

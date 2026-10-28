@@ -222,11 +222,11 @@ async def check_for_comment(previous_summary: str, image_b64: str) -> dict | Non
     try:
         raw_output = await llm.describe_image(prompt, image_b64, json_schema=WATCH_SCHEMA)
     except llm.LLMUnreachableError as exc:
-        print(f"[luna] ocr watch: vision call failed ({type(exc).__name__}): {exc}", file=sys.stderr)
+        print(f"[yuri] ocr watch: vision call failed ({type(exc).__name__}): {exc}", file=sys.stderr)
         return None
     result = _parse_watch_result(raw_output)
     if result is None:
-        print(f"[luna] ocr watch: unparseable check output: {raw_output[:300]!r}", file=sys.stderr)
+        print(f"[yuri] ocr watch: unparseable check output: {raw_output[:300]!r}", file=sys.stderr)
     return result
 
 

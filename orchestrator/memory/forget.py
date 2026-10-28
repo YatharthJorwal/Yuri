@@ -82,7 +82,7 @@ async def maybe_forget(user_text: str) -> str | None:
     try:
         facts_with_ids = await asyncio.to_thread(store.get_all_facts_with_ids, MAX_FACTS_FOR_FORGET_LOOKUP)
     except MemoryUnavailableError as exc:
-        print(f"[luna] forget: facts unavailable, skipping: {exc}", file=sys.stderr)
+        print(f"[yuri] forget: facts unavailable, skipping: {exc}", file=sys.stderr)
         return None
     if not facts_with_ids:
         return None
@@ -98,7 +98,7 @@ async def maybe_forget(user_text: str) -> str | None:
         async for delta in llm.stream_reply(messages):
             raw_output += delta
     except llm.LLMUnreachableError as exc:
-        print(f"[luna] forget: LLM unreachable, skipping this turn's forget check: {exc}", file=sys.stderr)
+        print(f"[yuri] forget: LLM unreachable, skipping this turn's forget check: {exc}", file=sys.stderr)
         return None
 
     indices = _parse_remove_indices(raw_output)
@@ -115,7 +115,7 @@ async def maybe_forget(user_text: str) -> str | None:
     try:
         await asyncio.to_thread(store.delete_facts, ids_to_remove)
     except MemoryUnavailableError as exc:
-        print(f"[luna] forget: couldn't delete facts: {exc}", file=sys.stderr)
+        print(f"[yuri] forget: couldn't delete facts: {exc}", file=sys.stderr)
         return None
 
     joined = "; ".join(removed_contents)

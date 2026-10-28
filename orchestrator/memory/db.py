@@ -143,7 +143,7 @@ def check_embedding_dimension_matches() -> None:
     expected_fragment = f"float[{configured_dim}]"
     if expected_fragment not in declared_sql:
         print(
-            f"[luna] WARNING: memory.db's episode_vectors table doesn't "
+            f"[yuri] WARNING: memory.db's episode_vectors table doesn't "
             f"declare {expected_fragment}, but config.yaml's "
             f"memory.embedding.dimension is {configured_dim} -- looks like "
             "the embedding model was changed after episodes already "

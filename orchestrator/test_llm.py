@@ -242,7 +242,7 @@ async def test_describe_image_sends_the_vision_model_and_logs_timing(monkeypatch
     assert await llm.describe_image("what is this", "aGVsbG8=") == "a cake"
     assert seen["payload"]["model"] == "small-vlm"
     err = capsys.readouterr().err
-    assert "[luna] vision: model=small-vlm" in err
+    assert "[yuri] vision: model=small-vlm" in err
     assert "load=2.5s" in err and "prompt_tokens=2650" in err and "prompt_eval=3.1s" in err
 
 

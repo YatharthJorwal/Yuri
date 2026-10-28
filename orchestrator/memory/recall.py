@@ -87,7 +87,7 @@ async def _get_facts_safely() -> list[str]:
     try:
         return await asyncio.to_thread(store.get_all_facts, MAX_FACTS_IN_RECALL)
     except MemoryUnavailableError as exc:
-        print(f"[luna] memory recall: facts unavailable, skipping: {exc}", file=sys.stderr)
+        print(f"[yuri] memory recall: facts unavailable, skipping: {exc}", file=sys.stderr)
         return []
 
 
@@ -96,7 +96,7 @@ async def _get_relevant_episodes_safely(user_text: str, top_k: int) -> list[str]
         query_embedding = await embed(user_text)
     except EmbeddingUnreachableError as exc:
         print(
-            f"[luna] memory recall: embedding unavailable, skipping episode "
+            f"[yuri] memory recall: embedding unavailable, skipping episode "
             f"recall this turn (facts still included if any): {exc}",
             file=sys.stderr,
         )
@@ -105,5 +105,5 @@ async def _get_relevant_episodes_safely(user_text: str, top_k: int) -> list[str]
     try:
         return await asyncio.to_thread(store.search_episodes, query_embedding, top_k)
     except MemoryUnavailableError as exc:
-        print(f"[luna] memory recall: episode search unavailable, skipping: {exc}", file=sys.stderr)
+        print(f"[yuri] memory recall: episode search unavailable, skipping: {exc}", file=sys.stderr)
         return []

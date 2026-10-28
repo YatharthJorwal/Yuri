@@ -126,7 +126,7 @@ export class CameraInput {
       // succeeded or failed on its own merits; the tray icon merely
       // failing to update shouldn't block anything or surface as a
       // camera error to the user.
-      console.error("[luna] failed to update tray camera indicator", err);
+      console.error("[yuri] failed to update tray camera indicator", err);
     }
   }
 }

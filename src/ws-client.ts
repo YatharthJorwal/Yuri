@@ -198,7 +198,7 @@ export class WsClient {
       try {
         parsed = JSON.parse(event.data);
       } catch {
-        console.warn("[luna] ignoring malformed message from orchestrator");
+        console.warn("[yuri] ignoring malformed message from orchestrator");
         return;
       }
       if (parsed.type === "speak") {
@@ -229,7 +229,7 @@ export class WsClient {
 
   sendUserText(text: string): void {
     if (this.socket?.readyState !== WebSocket.OPEN) {
-      console.warn("[luna] not connected to orchestrator yet");
+      console.warn("[yuri] not connected to orchestrator yet");
       return;
     }
     this.opts.onStateChange("listening");
@@ -238,7 +238,7 @@ export class WsClient {
 
   sendUserAudio(audioB64: string): void {
     if (this.socket?.readyState !== WebSocket.OPEN) {
-      console.warn("[luna] not connected to orchestrator yet");
+      console.warn("[yuri] not connected to orchestrator yet");
       return;
     }
     this.opts.onStateChange("listening");
@@ -259,7 +259,7 @@ export class WsClient {
    * said something, not a separate mechanism. */
   sendUserFile(filename: string, kind: "image" | "text", content: string, caption?: string): void {
     if (this.socket?.readyState !== WebSocket.OPEN) {
-      console.warn("[luna] not connected to orchestrator yet");
+      console.warn("[yuri] not connected to orchestrator yet");
       return;
     }
     this.opts.onStateChange("listening");

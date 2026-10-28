@@ -64,7 +64,7 @@ def _get_model() -> WhisperModel:
         # entirely (audio never reached the backend) -- see app.py's own
         # "received N bytes" log line right before this gets called.
         print(
-            f"[luna] loading faster-whisper model '{cfg.model_size}' on "
+            f"[yuri] loading faster-whisper model '{cfg.model_size}' on "
             f"{cfg.device} ({cfg.compute_type}) -- first mic use this run "
             "only. Downloads from Hugging Face on a genuinely first-ever "
             "run, which can take a while depending on your connection.",
@@ -74,7 +74,7 @@ def _get_model() -> WhisperModel:
         start = time.monotonic()
         _model = WhisperModel(cfg.model_size, device=cfg.device, compute_type=cfg.compute_type)
         print(
-            f"[luna] faster-whisper model loaded in {time.monotonic() - start:.1f}s",
+            f"[yuri] faster-whisper model loaded in {time.monotonic() - start:.1f}s",
             file=sys.stderr,
             flush=True,
         )
@@ -88,7 +88,7 @@ def _transcribe_sync(audio_bytes: bytes) -> str:
     # and resamples to the 16kHz mono its feature extractor wants, so the
     # WebM/Opus blob MediaRecorder produces in the frontend doesn't need any
     # conversion on this end. No temp file needed either.
-    print(f"[luna] transcribing {len(audio_bytes)} bytes of audio...", file=sys.stderr, flush=True)
+    print(f"[yuri] transcribing {len(audio_bytes)} bytes of audio...", file=sys.stderr, flush=True)
     start = time.monotonic()
     # model.transcribe() itself returns near-instantly -- `segments` is a
     # lazy generator, the actual GPU/CPU work happens while iterating it
@@ -103,7 +103,7 @@ def _transcribe_sync(audio_bytes: bytes) -> str:
     # more, then collapse the whole thing's outer whitespace once.
     result = "".join(segment.text for segment in segments).strip()
     print(
-        f"[luna] transcribe() finished in {time.monotonic() - start:.1f}s: {result!r}",
+        f"[yuri] transcribe() finished in {time.monotonic() - start:.1f}s: {result!r}",
         file=sys.stderr,
         flush=True,
     )

@@ -253,14 +253,14 @@ async def _log_transcript_turn_safely(user_text: str, assistant_text: str) -> No
     try:
         await asyncio.to_thread(store.add_transcript_turn, user_text, assistant_text)
     except MemoryUnavailableError as exc:
-        print(f"[luna] transcript log: write failed, skipping: {exc}", file=sys.stderr)
+        print(f"[yuri] transcript log: write failed, skipping: {exc}", file=sys.stderr)
 
 
 async def _get_transcript_log_safely() -> list[dict[str, str]]:
     try:
         return await asyncio.to_thread(store.get_transcript_log)
     except MemoryUnavailableError as exc:
-        print(f"[luna] transcript log: read failed, returning empty: {exc}", file=sys.stderr)
+        print(f"[yuri] transcript log: read failed, returning empty: {exc}", file=sys.stderr)
         return []
 
 
@@ -268,7 +268,7 @@ async def _clear_transcript_log_safely() -> None:
     try:
         await asyncio.to_thread(store.clear_transcript_log)
     except MemoryUnavailableError as exc:
-        print(f"[luna] transcript log: clear failed: {exc}", file=sys.stderr)
+        print(f"[yuri] transcript log: clear failed: {exc}", file=sys.stderr)
 
 
 def _fit_for_llm(
@@ -289,14 +289,14 @@ def _fit_for_llm(
     )
     if dropped:
         print(
-            f"[luna] context: left out the {dropped} oldest history message(s) this call "
+            f"[yuri] context: left out the {dropped} oldest history message(s) this call "
             f"to fit num_ctx={CONFIG.llm.num_ctx} (estimated prompt {est_tokens} tokens, "
             f"budget {budget}).",
             file=sys.stderr,
         )
     if budget and est_tokens > budget:
         print(
-            f"[luna] WARNING: the persona prompt + memory block alone (~{est_tokens} tokens) "
+            f"[yuri] WARNING: the persona prompt + memory block alone (~{est_tokens} tokens) "
             f"exceed the prompt budget ({budget}) for num_ctx={CONFIG.llm.num_ctx}; raise "
             "llm.num_ctx.",
             file=sys.stderr,
@@ -521,7 +521,7 @@ async def _run_turn(
         # Logged: this branch used to swallow the exception completely, so a
         # 400/500 or a timeout from a server that was running looked exactly
         # like "server not running" and left nothing to diagnose from.
-        print(f"[luna] LLM call failed ({type(exc).__name__}): {exc}", file=sys.stderr)
+        print(f"[yuri] LLM call failed ({type(exc).__name__}): {exc}", file=sys.stderr)
         line = llm_failure_line(exc)
         await _send_speak(websocket, line)
         spoken_parts.append(line)
@@ -536,7 +536,7 @@ async def _run_turn(
         # finally visible, and the flow falls through to the normal
         # turn_end. CancelledError (the stop button) is a BaseException and
         # deliberately NOT caught here -- stop must still cancel the turn.
-        print("[luna] turn failed with an unexpected error (reply cut off):", file=sys.stderr)
+        print("[yuri] turn failed with an unexpected error (reply cut off):", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
     finally:
         # In `finally`, not just after the try block, so a stop-button
@@ -655,12 +655,12 @@ async def _run_task_guide_check(
     try:
         image_b64 = await asyncio.to_thread(vision.capture_screen, CONFIG.vision.ambient_max_long_edge)
     except vision.ToolUnavailableError as exc:
-        print(f"[luna] task guide: capture failed, skipping this check: {exc}", file=sys.stderr)
+        print(f"[yuri] task guide: capture failed, skipping this check: {exc}", file=sys.stderr)
         return
 
     result = await task_guide.check_task_progress(task_description, image_b64)
     if result is None:
-        print("[luna] task guide: check result didn't parse, skipping this check", file=sys.stderr)
+        print("[yuri] task guide: check result didn't parse, skipping this check", file=sys.stderr)
         return
     # Logged unconditionally (not just on drift) so the loop's actual
     # cadence is visible in orchestrator.log without needing to wait for
@@ -668,7 +668,7 @@ async def _run_task_guide_check(
     # testing, or for tuning capture_interval_seconds against how often
     # checks are really landing.
     print(
-        f"[luna] task guide: checked '{task_description}' -> "
+        f"[yuri] task guide: checked '{task_description}' -> "
         f"on_task={result['on_task']} ({result['note'] or 'no note'})",
         file=sys.stderr,
     )
@@ -683,7 +683,7 @@ async def _run_task_guide_check(
         ):
             buffer += delta
     except llm.LLMUnreachableError as exc:
-        print(f"[luna] task guide: LLM unreachable for chide, skipping: {exc}", file=sys.stderr)
+        print(f"[yuri] task guide: LLM unreachable for chide, skipping: {exc}", file=sys.stderr)
         return
 
     buffer, detected_emotion = extract_emotion_tag(buffer)
@@ -752,14 +752,14 @@ async def _run_ocr_watch_check(
     try:
         image_b64 = await asyncio.to_thread(vision.capture_screen, CONFIG.vision.ambient_max_long_edge)
     except vision.ToolUnavailableError as exc:
-        print(f"[luna] ocr watch: capture failed, skipping this check: {exc}", file=sys.stderr)
+        print(f"[yuri] ocr watch: capture failed, skipping this check: {exc}", file=sys.stderr)
         return
 
     previous_summary = ocr_watch.get_state().last_seen_summary
     last_comment_at = ocr_watch.get_state().last_comment_at
     result = await ocr_watch.check_for_comment(previous_summary, image_b64)
     if result is None:
-        print("[luna] ocr watch: check result didn't parse, skipping this check", file=sys.stderr)
+        print("[yuri] ocr watch: check result didn't parse, skipping this check", file=sys.stderr)
         return
     ocr_watch.mark_checked(result["summary"])
     # The model's comment_worthy is necessary, not sufficient: code applies
@@ -777,7 +777,7 @@ async def _run_ocr_watch_check(
     )
     suppressed = f" [no comment: {reason}]" if result["comment_worthy"] and not speak else ""
     print(
-        f"[luna] ocr watch: checked -> comment_worthy={result['comment_worthy']} "
+        f"[yuri] ocr watch: checked -> comment_worthy={result['comment_worthy']} "
         f"({result['summary'] or 'no summary'}){suppressed}",
         file=sys.stderr,
     )
@@ -792,7 +792,7 @@ async def _run_ocr_watch_check(
         ):
             buffer += delta
     except llm.LLMUnreachableError as exc:
-        print(f"[luna] ocr watch: LLM unreachable for comment, skipping: {exc}", file=sys.stderr)
+        print(f"[yuri] ocr watch: LLM unreachable for comment, skipping: {exc}", file=sys.stderr)
         return
 
     buffer, detected_emotion = extract_emotion_tag(buffer)
@@ -968,14 +968,14 @@ async def ws_endpoint(websocket: WebSocket) -> None:
                 # Said once, because "Continuous OCR does nothing" was
                 # reported when it was really paused by a (phantom) task.
                 print(
-                    f"[luna] ocr watch: paused while Task Guide tracks "
+                    f"[yuri] ocr watch: paused while Task Guide tracks "
                     f"'{task_guide.get_state().description}' (ocr_watch.pause_during_task); "
                     "it resumes when that task ends.",
                     file=sys.stderr,
                 )
                 pause_announced = True
             elif not paused and pause_announced:
-                print("[luna] ocr watch: resumed (no task being tracked)", file=sys.stderr)
+                print("[yuri] ocr watch: resumed (no task being tracked)", file=sys.stderr)
                 pause_announced = False
             if paused:
                 # Task Guide is already watching the screen; ambient remarks
@@ -1099,7 +1099,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
                 # when its socket wasn't open yet, which looked exactly like
                 # "Continuous OCR does nothing"; a receipt line settles it.
                 print(
-                    f"[luna] ocr watch: {'enabled' if data.get('enabled') else 'disabled'} "
+                    f"[yuri] ocr watch: {'enabled' if data.get('enabled') else 'disabled'} "
                     f"by the shell (interval {CONFIG.ocr_watch.comment_interval_seconds}s)",
                     file=sys.stderr,
                 )
@@ -1160,7 +1160,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
                     # Malformed base64 -- nothing recoverable, drop it.
                     continue
 
-                print(f"[luna] received {len(audio_bytes)} bytes of audio", file=sys.stderr, flush=True)
+                print(f"[yuri] received {len(audio_bytes)} bytes of audio", file=sys.stderr, flush=True)
 
                 if current_turn_task is not None and not current_turn_task.done():
                     # Already mid-reply -- drop this clip without even
@@ -1173,7 +1173,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
                 try:
                     user_text = (await stt.transcribe(audio_bytes)).strip()
                 except stt.STTError as exc:
-                    print(f"[luna] STT failed: {exc}", file=sys.stderr)
+                    print(f"[yuri] STT failed: {exc}", file=sys.stderr)
                     await websocket.send_json({"type": "transcript", "text": ""})
                     await _send_speak(websocket, apply_persona_pass(STT_UNREACHABLE_LINE))
                     # This path never reaches _run_turn (there's no
@@ -1240,7 +1240,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
                     try:
                         description = await llm.describe_image(prompt, content)
                     except llm.LLMUnreachableError as exc:
-                        print(f"[luna] describe_image failed for upload: {exc}", file=sys.stderr)
+                        print(f"[yuri] describe_image failed for upload: {exc}", file=sys.stderr)
                         await _send_speak(websocket, apply_persona_pass(UPLOAD_VISION_UNREACHABLE_LINE))
                         await websocket.send_json(
                             {"type": "turn_end", "emotion": EMOTION_UPLOAD_VISION_UNREACHABLE}
@@ -1334,7 +1334,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
         try:
             await consolidation.consolidate_session(history_to_consolidate)
         except Exception as exc:  # noqa: BLE001 -- see comment above
-            print(f"[luna] consolidation failed unexpectedly: {exc}", file=sys.stderr)
+            print(f"[yuri] consolidation failed unexpectedly: {exc}", file=sys.stderr)
         # Only reachable for the shutdown-event break above -- a real
         # WebSocketDisconnect means the socket's already gone. Harmless
         # either way; already-closed is a no-op error we don't care about.
@@ -1398,7 +1398,7 @@ def _take_over_stale_orchestrator(pid_file: Path) -> None:
         except (ValueError, OSError):
             old_pid = None
         if old_pid is not None and old_pid != our_pid and _pid_is_alive(old_pid):
-            print(f"[luna] found a stale orchestrator still running (pid {old_pid}) -- taking over", flush=True)
+            print(f"[yuri] found a stale orchestrator still running (pid {old_pid}) -- taking over", flush=True)
             if sys.platform == "win32":
                 subprocess.run(["taskkill", "/PID", str(old_pid), "/F"], capture_output=True)
             else:

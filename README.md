@@ -3,9 +3,13 @@
 Local-first, agent-first companion for a single Windows PC. Successor to Luna.
 
 **Status: Phase 0 complete.** Luna's shell and orchestrator are ported and
-green (386 tests), the config surface is v2, the typed event bus exists, and the
-speech normalizer that keeps em dashes and quotes away from TTS is working. The
-model router is designed (`docs/ROUTING.md`) and is the next build step.
+green, the config surface is v2, the typed event bus exists, and the speech
+normalizer that keeps em dashes and quotes away from TTS is working. The model
+router is designed (`docs/ROUTING.md`) and is the next build step.
+
+Verified in this environment: `386` pytest, `49` frontend tests, `tsc --noEmit`,
+`vite build`, `cargo check`. Not yet verified: a real desktop launch (needs the
+VRM file, Ollama warm, and the Tauri window) and any actual audio output.
 
 ## Quickstart
 

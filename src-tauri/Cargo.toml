@@ -1,12 +1,12 @@
 [package]
-name = "luna"
+name = "yuri"
 version = "0.1.0"
-description = "Luna - a local AI desktop companion"
+description = "Yuri - a local AI desktop companion"
 edition = "2021"
 rust-version = "1.77"
 
 [lib]
-name = "luna_lib"
+name = "yuri_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

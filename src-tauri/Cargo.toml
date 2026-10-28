@@ -1,0 +1,32 @@
+[package]
+name = "luna"
+version = "0.1.0"
+description = "Luna - a local AI desktop companion"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "luna_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Windows Job Object wrapper -- see lib.rs's install_kill_on_close_job() for
+# why (children must die with the parent on End Task / Ctrl+C, not just on
+# tray Quit).
+[target.'cfg(windows)'.dependencies]
+win32job = "2"
+
+[profile.release]
+# Small footprint matters here -- this runs alongside a game.
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

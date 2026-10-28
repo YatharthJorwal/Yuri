@@ -1,0 +1,16 @@
+# Machine-specific paths for src-tauri/src/lib.rs's spawn_backend_processes()
+# to auto-start GPT-SoVITS alongside the orchestrator when Luna's app itself
+# launches -- replaces the old start-luna.bat's separate terminal windows.
+#
+# Copy this file to "launcher.local.txt" (same folder, gitignored -- it'll
+# have your real Windows path in it, same reasoning start-luna.bat and
+# config.yaml's ref_audio_path stayed out of the repo) and fill in the real
+# value below.
+#
+# If this file (launcher.local.txt, not this .example one) doesn't exist,
+# GPT-SoVITS just doesn't get auto-started -- voice falls back to pyttsx3
+# per-turn the same way it always has, nothing breaks.
+
+# Root of your GPT-SoVITS install -- the folder containing runtime\python.exe
+# and api_v2.py. No quotes needed even if the path has spaces.
+GPT_SOVITS_DIR=D:\AI\Project Luna\GPT-SoVITS-v3lora-20250228

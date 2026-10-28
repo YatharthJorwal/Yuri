@@ -1,0 +1,341 @@
+# Yuri — config example
+#
+# Everything here is user-editable without touching Python. Every key has a code
+# default; this file is the full surface, not a required minimum. Copy to
+# config.yaml and edit.
+#
+# Secrets never live in this file. Keys come from the environment or from
+# secrets.local.yaml (gitignored), named by `api_key_env`.
+#
+# WINDOWS PATHS: wrap any path containing backslashes in SINGLE quotes, e.g.
+#   'C:\Users\you\file.wav'
+# Double quotes treat \U \n \t as escapes and will fail to parse (Luna hit this).
+
+version: 2
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Providers. The local one is the default for everything; airouter is only ever
+# reached by the `mind` role (ROUTING.md §3).
+# ─────────────────────────────────────────────────────────────────────────────
+providers:
+  local_ollama:
+    enabled: true
+    base_url: 'http://127.0.0.1:11434'
+    # ollama_native is required for num_ctx, think:false, inline images and
+    # `format` JSON schemas. Use `openai` only for a llama.cpp server.
+    api_style: 'ollama_native'
+    # Keeps the 6.6 GB model loaded between turns instead of paying a cold load.
+    keep_alive: '30m'
+    # One value for every role: Ollama reloads the model when two requests
+    # disagree on it.
+    num_ctx: 8192
+    request_timeout_s: 120
+
+  airouter:
+    enabled: false          # turn on only once AIROUTER_API_KEY resolves
+    base_url: 'https://api.airouter.in/v1'
+    api_key_env: 'AIROUTER_API_KEY'
+    api_style: 'openai'     # /chat/completions, SSE, Bearer auth
+    # Public: returns context length, pricing, tags and zdr per model.
+    models_url: 'https://api.airouter.in/v1/models'
+    models_refresh_hours: 24
+    models_cache: 'data/airouter_models.json'
+    prefer_zdr: true        # prefer zero-data-retention models for internal text
+    request_timeout_s: 120
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Models. Local names are exact Ollama tags. Cloud names come from the live
+# catalog; the ones here are the P1 benchmark shortlist, not a commitment.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Mapping convention: when a role resolves to local_ollama it uses
+# models.local.<role>; when it resolves to airouter it uses models.cloud.<role>.
+# So `mind` has an entry in BOTH blocks: the cloud model, and the local model
+# used when it falls back (ROUTING.md §4).
+models:
+  local:
+    reflex: 'qwen3.5:9b'          # Q4_K_M, 6.55 GB, vision + tools
+    vision: null                  # null = use reflex (it reports vision)
+    classifier: 'qwen3.5:4b'      # intent, task, JSON
+    memory_writer: 'qwen3.5:4b'   # summarization; local by policy (D-015)
+    embed: 'nomic-embed-text'     # 768-dim; sqlite-vec width is fixed to this
+    mind: 'qwen3.5:9b'            # local fallback for the mind role
+  cloud:
+    mind: 'deepseek/deepseek-v4-flash'   # P1 bench decides; cheapest with 1M ctx + tools
+    mind_fallback: 'alibaba/qwen-3-235b'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Roles. A role is a capability slot. `local_only: true` is enforced at config
+# load: putting a cloud provider in one is a startup error, not a warning.
+# ─────────────────────────────────────────────────────────────────────────────
+roles:
+  reflex:
+    chain: [local_ollama]
+    local_only: true
+    max_tokens: 220
+    temperature: 0.8
+  vision:
+    chain: [local_ollama]
+    local_only: true
+    max_tokens: 400
+    temperature: 0.4
+  classifier:
+    chain: [local_ollama]
+    local_only: true
+    max_tokens: 300
+    temperature: 0.1
+  embed:
+    chain: [local_ollama]
+    local_only: true
+  memory_writer:
+    chain: [local_ollama]
+    local_only: true      # D-015: the most personal text never leaves
+    max_tokens: 800
+    temperature: 0.3
+  mind:
+    chain: [airouter, local_ollama]
+    local_only: false
+    max_tokens: 2000
+    temperature: 0.6
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Routing. Decision order and reason codes are ROUTING.md §4. First match wins.
+# ─────────────────────────────────────────────────────────────────────────────
+routing:
+  mode: 'shadow'              # shadow | enforce (D-014)
+  enforce_roles: [mind]       # which roles actually execute the decision
+
+  escalate_when:
+    task_steps_gte: 4
+    tool_calls_gte: 2
+    prompt_tokens_gte: 6000
+    explicit_think_hard: true     # "think hard", "take your time", hotkey
+    background_job: true
+
+  # Roles that can never escalate, whatever the thresholds say. Belt and braces
+  # with roles.*.local_only.
+  never_escalate: [reflex, vision, classifier, embed, memory_writer]
+
+  # Injected or screen-sourced content in the turn forces local Mind (D-012).
+  untrusted_context_blocks_cloud: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Privacy. Classes are per message; the call takes the maximum (ROUTING.md §5).
+# ─────────────────────────────────────────────────────────────────────────────
+privacy:
+  cloud_allowed_classes: [public, internal]
+  local_only_classes: [secret]
+  redaction:
+    secrets: true
+    file_paths: true
+    emails: true
+    long_digit_runs: true
+    memory_excerpt_max_chars: 600
+    transcript_max_chars: 1200
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Budget. Prices come from the provider catalog; caps are checked before a call.
+# ─────────────────────────────────────────────────────────────────────────────
+budget:
+  enabled: true
+  hourly_usd: 0.25
+  daily_usd: 1.50
+  monthly_usd: 20.00
+  on_exhausted: 'local_only'
+  prices: 'from_provider'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Audit. One JSONL row per model call, counts only, never content by default.
+# ─────────────────────────────────────────────────────────────────────────────
+audit:
+  path: 'logs/audit.jsonl'
+  log_prompts: false
+  log_responses: false
+  log_redaction_counts: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LLM defaults shared by every local call.
+# ─────────────────────────────────────────────────────────────────────────────
+llm:
+  temperature: 0.8
+  max_tokens: 512
+  think: false                # hybrid-thinking models: keep reasoning off
+  # One value for every call: Ollama reloads the model when two requests
+  # disagree on it. Raise to 16384 only if nvidia-smi shows headroom.
+  num_ctx: 8192
+  # null = same model as reflex (it reports vision). Set a separate tag only
+  # if the reflex model is a text-only build.
+  vision_model: null
+  top_p: 0.95
+  top_k: 20
+  presence_penalty: 1.5
+  warm_up_on_start: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Voice. Entirely local (D-006). Details in PHASE-2-FAST-PATH.md.
+# ─────────────────────────────────────────────────────────────────────────────
+voice:
+  enabled: true
+
+  stt:
+    engine: 'faster_whisper'
+    model_size: 'small'
+    device: 'cpu'
+    compute_type: 'int8'
+    language: 'en'
+    timeout_s: 20
+
+  vad:
+    engine: 'silero_onnx'       # fallback chain: webrtcvad, then energy gate
+    speech_threshold: 0.5
+    end_silence_ms: 500
+    min_utterance_ms: 250
+    max_utterance_ms: 30000
+    pre_roll_ms: 200
+
+  barge_in:
+    enabled: true
+    min_speech_ms: 300
+    stop_within_ms: 150
+    aec: 'browser'              # echoCancellation in getUserMedia
+    fallback: 'half_duplex'     # applied if the P2 gate fails (D-016)
+
+  push_to_talk_key: 'F9'
+
+  mic:
+    save_audio: false
+    indicator: 'tray'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TTS. GPT-SoVITS is already installed on this machine; Yuri launches it, it is
+# not an install step. One request per clause (D-009).
+# ─────────────────────────────────────────────────────────────────────────────
+tts:
+  engine: 'gpt_sovits'
+  stream: 'per_clause'
+  fallback_engine: 'pyttsx3'
+
+  gpt_sovits:
+    api_url: 'http://127.0.0.1:9880/tts'
+
+    launch:
+      enabled: true
+      python: 'D:\AI\Project Luna\GPT-SoVITS-v3lora-20250228\runtime\python.exe'
+      script: 'D:\AI\Project Luna\GPT-SoVITS-v3lora-20250228\api_v2.py'
+      cwd: 'D:\AI\Project Luna\GPT-SoVITS-v3lora-20250228'
+      args:
+        - '-a'
+        - '127.0.0.1'
+        - '-p'
+        - '9880'
+        - '-c'
+        - 'GPT_SoVITS/configs/tts_infer.yaml'
+      startup_timeout_s: 120
+      restart_max: 2
+
+    # Zero-shot cloned voice from this clip. 8.52 s, mono.
+    ref_audio_path: 'C:\Users\User\Downloads\character_files_main_sample.wav'
+    prompt_text: "This is a sample voice for you to just get started with because it sounds kind of cute, but just make sure this doesn't have long silences."
+    prompt_lang: 'en'
+    text_lang: 'en'
+
+    media_type: 'wav'
+    prefetch_depth: 2
+    first_clause_buffer_ms: 800
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Speech-safe text. Applied to every spoken string, before TTS (D-008).
+# ─────────────────────────────────────────────────────────────────────────────
+speech:
+  enabled: true
+  max_segment_chars: 160
+  min_segment_chars: 12
+  code_blocks: 'say_marker'     # say_marker | skip
+  acronym_allowlist: ['AI', 'API', 'CPU', 'CSS', 'DLL', 'FPS', 'GPU', 'HTML', 'HTTP', 'HTTPS', 'IP', 'JS', 'JSON', 'LLM', 'ML', 'NLP', 'OCR', 'OS', 'PC', 'RAM', 'SQL', 'SSD', 'STT', 'TV', 'TTS', 'URL', 'USB', 'VAD', 'VPN', 'VRAM', 'VRM', 'VRMA', 'YAML']
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Latency instrumentation. One JSONL row per spoken turn (PHASE-2 §5).
+# ─────────────────────────────────────────────────────────────────────────────
+latency:
+  log: 'logs/latency.jsonl'
+  report_after_turns: 20
+  targets_ms:
+    stt: 700
+    ttft: 400
+    clause: 200
+    tts: 900
+    playback: 50
+    total_p50: 1200
+    total_p95: 1800
+    inter_clause_gap: 300
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Memory. SQLite + sqlite-vec, one file, 768-dim (Luna's store, extended).
+# ─────────────────────────────────────────────────────────────────────────────
+memory:
+  db_path: 'data/memory.db'
+  recall_top_k: 5
+  writer:
+    on_session_end: true
+    interval_s: 600
+    max_tokens: 800
+  decay:
+    enabled: true
+    half_life_days: 30
+  profile_card:
+    max_chars: 800
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Task Guide: while a task is tracked, glance at the screen on this interval
+# and steer back if the user drifts. Ported from Luna, unchanged.
+# ─────────────────────────────────────────────────────────────────────────────
+task_guide:
+  capture_interval_seconds: 90
+  idle_timeout_seconds: 1800
+  # The classifier owns task start/stop; the model calling the tool itself
+  # once started a phantom task from a bare "hi" (Luna's log). Leave false.
+  model_can_start_tasks: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Continuous OCR: ambient remarks about the screen. Rare by design, and code
+# enforces a floor between two spoken remarks regardless of what the model wants.
+# ─────────────────────────────────────────────────────────────────────────────
+ocr_watch:
+  comment_interval_seconds: 240
+  min_comment_gap_seconds: 120
+  same_screen_similarity: 0.6
+  pause_during_task: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Screenshot sizing. Image cost grows with pixel count; full 1080p was the
+# reason background glances were slow.
+# ─────────────────────────────────────────────────────────────────────────────
+vision:
+  ambient_max_long_edge: 1024
+  look_max_long_edge: 1600
+  jpeg_quality: 85
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Persona. Speech rules live in the persona file; speech.py enforces them.
+# ─────────────────────────────────────────────────────────────────────────────
+persona:
+  # Empty for now: the prompt is inline in orchestrator/persona.py. P5 moves it
+  # to a swappable file so the tsundere voice and the reasoning stay separate.
+  file: ''
+  name: 'Yuri'
+  # The tag that comes back from the model, used for VRM expression + TTS style.
+  emotion_tag: '[emotion]'
+
+session:
+  max_history_turns: 20
+  max_unprompted_in_history: 3
+  user_name: 'Yatharth'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logs. One file, per-service tags.
+# ─────────────────────────────────────────────────────────────────────────────
+logs:
+  path: 'logs/yuri.log'
+  level: 'info'
+  rotate_mb: 20
+  keep_files: 5

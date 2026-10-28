@@ -1,0 +1,42 @@
+# Secrets never enter the repo. Copy secrets.example.yaml -> secrets.local.yaml
+secrets.local.yaml
+.env
+*.key
+
+# Runtime state
+data/
+logs/
+cache/
+audio_cache/
+image_cache/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node / Tauri
+node_modules/
+dist/
+src-tauri/target/
+
+# Local model weights and reference audio stay out of source control
+models/
+*.gguf
+*.wav
+
+# User-supplied avatar assets. Add your own; nothing here is committed.
+# (The README.txt placeholders in these folders are tracked.)
+public/vrm/*.vrm
+public/vrm-animations/*.vrma
+public/vrm-animations/**/*.vrma
+
+# Local orchestrator config (copy from config/config.example.yaml)
+config/config.yaml
+orchestrator/config.yaml
+
+# TypeScript build info
+*.tsbuildinfo
+

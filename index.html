@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Yuri</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="stage-container">
+      <canvas id="avatar-canvas"></canvas>
+    </div>
+
+    <div id="caption" aria-live="polite"></div>
+
+    <!-- Pending-attachment chip -- shown after a file is picked from the
+         quick-action menu's Upload item but before it's actually sent,
+         so the user can add a caption in the normal input box first (see
+         main.ts's attachFile/submitTurn). Positioned directly above
+         #hud, same anchoring idea #quick-action-menu/#log-panel use. -->
+    <div id="pending-attachment" hidden>
+      <span id="pending-attachment-name"></span>
+      <button id="pending-attachment-remove" type="button" title="Remove attachment" aria-label="Remove attachment">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </button>
+    </div>
+
+    <div id="hud">
+      <button
+        id="quick-action-button"
+        type="button"
+        title="More"
+        aria-label="More actions"
+        aria-haspopup="true"
+        aria-expanded="false"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </button>
+      <div id="status-orb" title="disconnected"></div>
+      <input
+        id="input-box"
+        type="text"
+        placeholder="Say something to Yuri…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button id="mic-button" type="button" title="Voice input" aria-label="Voice input" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" />
+          <path d="M6 11a1 1 0 1 1 2 0 4 4 0 0 0 8 0 1 1 0 1 1 2 0 6 6 0 0 1-5 5.917V19h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-2.083A6 6 0 0 1 6 11Z" />
+        </svg>
+      </button>
+      <button id="action-button" type="button" hidden></button>
+    </div>
+
+    <!-- Quick-action menu's Upload item's actual file picker -- hidden,
+         triggered programmatically by #qa-upload's click handler (see
+         main.ts's setupHud). accept is a UX hint for the OS file dialog
+         only; src/file-upload.ts's classifyFile() is the real gate on
+         what's actually usable once something's picked, since accept
+         can't fully express "text/* OR this extension list". -->
+    <input
+      id="file-upload-input"
+      type="file"
+      accept="image/*,text/*,.md,.markdown,.csv,.log,.json,.yaml,.yml,.toml,.ini,.xml,.html,.css,.js,.ts,.jsx,.tsx,.py,.rs,.go,.java,.c,.cpp,.h,.hpp,.cs,.rb,.php,.sh,.sql"
+      hidden
+    />
+
+    <!-- Quick-action menu -- opened by #quick-action-button, closed on
+         outside click/Escape/picking an item (see main.ts's setupHud).
+         Positioned the same way #log-panel is (anchored above #hud) for
+         consistency. #qa-log and #qa-emotion-test (formerly their own
+         standalone #log-button/#emotion-test-button in the always-visible
+         HUD pill) now live in here instead, alongside the newer items --
+         most of which are inert placeholders for now (see
+         data-status="soon"), not yet real features. -->
+    <div id="quick-action-menu" hidden>
+      <button class="quick-action-item" id="qa-temp-mode" type="button" data-action="temp-mode">
+        <span class="quick-action-label">Temp Chat</span>
+        <span class="quick-action-state" id="qa-temp-mode-state">Off</span>
+      </button>
+      <button class="quick-action-item" id="qa-log" type="button" data-action="log">
+        <span class="quick-action-label">Conversation Log</span>
+      </button>
+      <button class="quick-action-item" id="qa-emotion-test" type="button" data-action="emotion-test">
+        <span class="quick-action-label">Cycle Test Expression</span>
+      </button>
+      <div class="quick-action-divider"></div>
+      <button class="quick-action-item" type="button" data-status="soon" disabled title="Not built yet">
+        <span class="quick-action-label">Live Voice Chat</span>
+        <span class="quick-action-soon">Soon</span>
+      </button>
+      <button class="quick-action-item" id="qa-camera" type="button" data-action="camera">
+        <span class="quick-action-label">Camera</span>
+        <span class="quick-action-state" id="qa-camera-state">Off</span>
+      </button>
+      <button class="quick-action-item" id="qa-ocr-watch" type="button" data-action="ocr-watch">
+        <span class="quick-action-label">Continuous OCR</span>
+        <span class="quick-action-state" id="qa-ocr-watch-state">Off</span>
+      </button>
+      <button class="quick-action-item" id="qa-upload" type="button" data-action="upload">
+        <span class="quick-action-label">Upload Image / File</span>
+      </button>
+      <button class="quick-action-item" type="button" data-status="soon" disabled title="Not built yet">
+        <span class="quick-action-label">Agent Mode</span>
+        <span class="quick-action-soon">Soon</span>
+      </button>
+    </div>
+
+    <!-- Phase 9: persistent conversation-log panel -- hidden by default,
+         toggled by #qa-log, populated from the orchestrator's `log`
+         message (see ws-client.ts's protocol comment and main.ts's
+         setupHud). #log-panel-body's placeholder <p> is swapped for real
+         turn rows once a `log` message actually arrives; kept in the
+         markup rather than only in JS so there's never a blank flash
+         before the first response comes back. -->
+    <div id="log-panel" hidden>
+      <div id="log-panel-header">
+        <span id="log-panel-title">Conversation Log</span>
+        <div id="log-panel-actions">
+          <button id="log-clear-button" type="button">Clear Log</button>
+          <button id="log-close-button" type="button" title="Close" aria-label="Close conversation log">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="log-panel-body">
+        <p id="log-empty-message">No conversations logged yet.</p>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

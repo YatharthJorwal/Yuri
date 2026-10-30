@@ -35,6 +35,7 @@ import re
 import sys
 
 import llm
+import router
 from .db import MemoryUnavailableError
 from .embeddings import EmbeddingUnreachableError, embed
 from . import store
@@ -87,7 +88,7 @@ async def consolidate_session(history: list[dict[str, str]]) -> None:
 
     raw_output = ""
     try:
-        async for delta in llm.stream_reply(consolidation_messages):
+        async for delta in router.stream_text("memory_writer", consolidation_messages):
             raw_output += delta
     except llm.LLMUnreachableError as exc:
         print(f"[yuri] consolidation: LLM unreachable, session's memory is lost: {exc}", file=sys.stderr)

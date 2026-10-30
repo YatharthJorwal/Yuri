@@ -24,6 +24,7 @@ import io
 from typing import TYPE_CHECKING
 
 import llm
+import router
 from config import CONFIG
 
 if TYPE_CHECKING:
@@ -118,7 +119,7 @@ async def describe_screen() -> str:
         "anything that looks like it needs the user's attention. Be "
         "concise -- a few sentences, not a wall of text."
     )
-    return await llm.describe_image(prompt, image_b64)
+    return await router.describe_image("vision", prompt, image_b64)
 
 
 def read_clipboard() -> str:

@@ -305,6 +305,50 @@ not need).
 
 ---
 
+## D-018 — The router wraps `llm.py` instead of replacing it
+
+**Decision.** `router/providers/ollama_native.py` calls `llm.stream_reply`,
+`llm.stream_reply_with_tools` and `llm.describe_image` by module attribute. It is
+an adapter, not a reimplementation. Cloud errors subclass
+`llm.LLMUnreachableError`, so every existing `except` and every existing test
+stub keeps working.
+
+**Why.** `llm.py` contains the accumulated Ollama knowledge: one `num_ctx` for
+every call, `think` handling, the no-tools model memory, the `format` retry, the
+context calibration feed, the 120 s timeouts. Rewriting it to fit a new interface
+would have thrown all of that away and re-earned each bug. The ported suite (314
+tests) also stubs `llm.<function>` directly; attribute access keeps those stubs
+effective, which is why the whole suite stayed green through the wiring.
+
+**Rejected.** A clean provider implementation replacing `llm.py` (equal behavior
+for a week of work and a new round of model bugs); wrapping at the `app.py` level
+only (every caller would keep knowing provider details).
+
+**Cost.** The dependency arrow points "up" from router to llm, which is unusual.
+It is deliberate and bounded: when a second local backend appears (llama.cpp
+server), the adapter becomes two adapters and `llm.py` becomes one of them.
+
+---
+
+## D-019 — Cloud is enabled by default in config, disabled by a missing key
+
+**Decision.** `providers.airouter.enabled: true` ships on. With no resolvable
+`AIROUTER_API_KEY`, startup marks the provider unavailable, prints one line, and
+`mind` stays local. `routing.mode` remains `shadow` until the user opts in.
+
+**Why.** A key in `.env` should be the only step needed to make cloud work; a
+config edit as a second step is a support load and a footgun. The dangerous
+switch is not "is the provider configured" but "do we execute cloud decisions",
+and that one stays off.
+
+**Rejected.** `enabled: false` by default (people leave it off and wonder why
+costs stay at zero); auto-enforcing `mind` when a key exists (spending money as a
+side effect of a config file).
+
+**Cost.** A fresh clone prints one warning about the missing key. Acceptable.
+
+---
+
 ## Superseded / historical
 
 - **D-002 (first version).** "Groq is the cloud provider" was drafted before the

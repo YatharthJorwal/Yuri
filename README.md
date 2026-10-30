@@ -2,14 +2,17 @@
 
 Local-first, agent-first companion for a single Windows PC. Successor to Luna.
 
-**Status: Phase 0 complete.** Luna's shell and orchestrator are ported and
-green, the config surface is v2, the typed event bus exists, and the speech
-normalizer that keeps em dashes and quotes away from TTS is working. The model
-router is designed (`docs/ROUTING.md`) and is the next build step.
+**Status: Phase 0 complete, Phase 1 router core landed.** Luna's shell and
+orchestrator are ported and green, the config surface is v2, the typed event bus
+exists, the speech normalizer keeps em dashes and quotes away from TTS, and every
+model call now goes through the router: one decision function, a local provider, an
+AI Router provider, spend caps, redaction and an audit log. It runs in `shadow`
+mode by default, so nothing leaves the machine until you flip it.
 
-Verified in this environment: `386` pytest, `49` frontend tests, `tsc --noEmit`,
-`vite build`, `cargo check`. Not yet verified: a real desktop launch (needs the
-VRM file, Ollama warm, and the Tauri window) and any actual audio output.
+Verified in this environment: `472` pytest, `49` frontend tests, `tsc --noEmit`,
+`vite build`, `cargo check`, and a live `/v1/models` fetch (341 models, prices and
+`zdr` flags parsed). Not yet verified: a real desktop launch (needs the VRM file
+and a warm Ollama), audio output, and a real cloud completion (needs your key).
 
 ## Quickstart
 
@@ -21,10 +24,14 @@ python -m venv .venv
 # 2. Shell dependencies
 npm install
 
-# 3. Config (optional -- the example is used verbatim when this is absent)
+# 3. Your AI Router key (optional -- without it every role stays local)
+#    Open .env and paste the key after AIROUTER_API_KEY=
+#    (or copy .env.example to .env first if you deleted it)
+
+# 4. Config (optional -- the example is used verbatim when this is absent)
 Copy-Item config\config.example.yaml config\config.yaml
 
-# 4. Run
+# 5. Run
 npm run tauri dev
 ```
 
@@ -34,12 +41,14 @@ classifier and memory). GPT-SoVITS is launched by the orchestrator once the
 Phase 2 launcher lands; until then TTS falls back to `pyttsx3` and says so in
 the log.
 
-Check what the config resolved to without starting the app:
+Check config, key resolution, catalog and spend without starting the app:
 
 ```powershell
-cd orchestrator
-..\.venv\Scripts\python.exe -c "import config; print(config.print_summary())"
+.\.venv\Scripts\python.exe orchestrator\check.py            # cached, no network
+.\.venv\Scripts\python.exe orchestrator\check.py --refresh  # fetch /v1/models
 ```
+
+That is the command to run when "why is she not using the cloud" is the question.
 
 ## Your avatar and animations
 
@@ -57,7 +66,7 @@ the avatar still breathes, blinks and glances, because those are procedural.
 ## Tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 386
+.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 472
 npm run test:fe                                        # 49
 npx tsc --noEmit
 npm run build
@@ -65,6 +74,24 @@ npm run build
 
 No GPU, network, or API key is required for the suite. Tests that touch models
 use fakes.
+
+## What was built in Phase 1 (router)
+
+- **`orchestrator/router/`**: `decide()` is a pure function over (role, request,
+  config, state) implementing the ten rules in `ROUTING.md` in order; providers
+  for Ollama-native and AI Router; a `/v1/models` catalog with cache and
+  fail-closed behavior; a SQLite spend ledger; a JSONL audit log; redaction for
+  keys, paths, emails and long digit runs.
+- **One entry point**: `app.py`, `task_guide.py`, `ocr_watch.py`, `camera.py`,
+  `tools/vision.py` and both memory jobs now ask for a *role*
+  (`reflex`/`vision`/`classifier`/`memory_writer`) instead of a model.
+- **Shadow by default**: decisions are computed and audited, execution stays
+  local. `routing.mode: enforce` + `enforce_roles` is the opt-in; nothing spends
+  money until then.
+- **`orchestrator/check.py`**: config, key resolution, catalog and spend in one
+  screen.
+- **77 new tests** for the decision table, budget, audit, redaction, discovery,
+  the SSE provider and the shadow/enforce/fallback paths.
 
 ## What was built in Phase 0
 
@@ -82,6 +109,28 @@ use fakes.
   53 tests, including a golden corpus and an idempotence invariant.
 - **Rebrand**: window title, product name, identifier, persona prompt, model
   path, asset placeholders.
+
+## Cloud routing in one minute
+
+Put the key in `.env` (`AIROUTER_API_KEY=`). With it, `check.py` should say
+`cloud: available` and show a catalog size. Without it, Yuri still runs: every
+role is local and `mind` falls back to `qwen3.5:9b`.
+
+The router only ever escalates the `mind` role, and only for a turn that is
+`trusted`, non-`secret`, has budget left, and meets one of the escalation
+conditions (background job, explicit "think hard", or a large/multi-tool task).
+Pixels, audio, raw transcripts and memory writes are structurally local: the
+decision function refuses them before a provider is chosen.
+
+To actually let Mind call out, set in `config/config.yaml`:
+
+```yaml
+routing:
+  mode: enforce
+  enforce_roles: [mind]
+```
+
+Until then the audit log (`logs/audit.jsonl`) records what it *would* have done.
 
 ## Docs
 

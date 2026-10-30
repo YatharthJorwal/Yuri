@@ -36,6 +36,7 @@ import re
 import sys
 
 import llm
+import router
 from .db import MemoryUnavailableError
 from . import store
 
@@ -95,7 +96,7 @@ async def maybe_forget(user_text: str) -> str | None:
 
     raw_output = ""
     try:
-        async for delta in llm.stream_reply(messages):
+        async for delta in router.stream_text("memory_writer", messages):
             raw_output += delta
     except llm.LLMUnreachableError as exc:
         print(f"[yuri] forget: LLM unreachable, skipping this turn's forget check: {exc}", file=sys.stderr)

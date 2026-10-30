@@ -185,6 +185,9 @@ class BudgetConfig:
     monthly_usd: float = 20.00
     on_exhausted: str = "local_only"
     prices: str = "from_provider"
+    # SQLite ledger, so caps survive a restart. A cap of 0 means "never spend";
+    # a negative cap means unlimited.
+    ledger_path: str = "data/spend.db"
 
 
 @dataclass(frozen=True)
@@ -450,14 +453,21 @@ def _read_dotenv(path: pathlib.Path) -> dict[str, str]:
     return out
 
 
-def resolve_api_key(api_key_env: str, *, secrets_path: pathlib.Path = SECRETS_PATH) -> str | None:
+def resolve_api_key(
+    api_key_env: str,
+    *,
+    secrets_path: pathlib.Path = SECRETS_PATH,
+    dotenv_path: pathlib.Path | None = None,
+) -> str | None:
     """The key for a provider, or None. Never guesses, never defaults to a
-    placeholder that would silently 401."""
+    placeholder that would silently 401.
+
+    Order: environment variable, then `secrets.local.yaml`, then `.env`."""
     if not api_key_env:
         return None
 
     value = os.environ.get(api_key_env)
-    if value:
+    if value and value.strip():
         return value.strip()
 
     try:
@@ -476,7 +486,7 @@ def resolve_api_key(api_key_env: str, *, secrets_path: pathlib.Path = SECRETS_PA
     if flat:
         return str(flat).strip()
 
-    return _read_dotenv(_REPO_ROOT / ".env").get(api_key_env)
+    return _read_dotenv(dotenv_path or (_REPO_ROOT / ".env")).get(api_key_env)
 
 
 # ─── loading ─────────────────────────────────────────────────────────────────

@@ -29,6 +29,7 @@ import time
 from dataclasses import dataclass, replace
 
 import llm
+import router
 
 # Polled far less often than Task Guide Mode's own loop (15s) -- ambient
 # commentary should be rare by design, not prompt-timely the way noticing
@@ -220,7 +221,7 @@ async def check_for_comment(previous_summary: str, image_b64: str) -> dict | Non
     # own tests, not by inspection).
     prompt = _WATCH_SYSTEM_PROMPT.replace("__PREVIOUS_SUMMARY__", repr(previous_summary or "(nothing yet)"))
     try:
-        raw_output = await llm.describe_image(prompt, image_b64, json_schema=WATCH_SCHEMA)
+        raw_output = await router.describe_image("vision", prompt, image_b64, json_schema=WATCH_SCHEMA)
     except llm.LLMUnreachableError as exc:
         print(f"[yuri] ocr watch: vision call failed ({type(exc).__name__}): {exc}", file=sys.stderr)
         return None

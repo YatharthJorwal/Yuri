@@ -32,7 +32,9 @@ providers:
     request_timeout_s: 120
 
   airouter:
-    enabled: false          # turn on only once AIROUTER_API_KEY resolves
+    # Cloud turns on by itself once AIROUTER_API_KEY resolves (put it in .env).
+    # With no key, the router marks the provider unavailable and Mind stays local.
+    enabled: true
     base_url: 'https://api.airouter.in/v1'
     api_key_env: 'AIROUTER_API_KEY'
     api_style: 'openai'     # /chat/completions, SSE, Bearer auth
@@ -143,6 +145,8 @@ budget:
   monthly_usd: 20.00
   on_exhausted: 'local_only'
   prices: 'from_provider'
+  # SQLite ledger so caps survive a restart. A cap of 0 means "never spend".
+  ledger_path: 'data/spend.db'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Audit. One JSONL row per model call, counts only, never content by default.

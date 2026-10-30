@@ -28,6 +28,7 @@ import asyncio
 from fastapi import WebSocket
 
 import llm
+import router
 from tools.vision import ToolUnavailableError
 
 # Bounded so a browser that never responds (camera toggle actually off,
@@ -109,4 +110,4 @@ async def describe_camera(websocket: WebSocket) -> str:
         "anything notable -- based only on the image, not a generic "
         "guess."
     )
-    return await llm.describe_image(prompt, image_b64)
+    return await router.describe_image("vision", prompt, image_b64)

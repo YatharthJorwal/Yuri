@@ -25,7 +25,8 @@ import sys
 import time
 from dataclasses import dataclass, replace
 
-import llm
+import llm
+import router
 
 
 @dataclass(frozen=True)
@@ -172,7 +173,7 @@ async def check_task_progress(task_description: str, image_b64: str) -> dict | N
         f"{_CHECK_SYSTEM_PROMPT}\n\nCurrent task/step: {task_description!r}"
     )
     try:
-        raw_output = await llm.describe_image(prompt, image_b64, json_schema=CHECK_SCHEMA)
+        raw_output = await router.describe_image("vision", prompt, image_b64, json_schema=CHECK_SCHEMA)
     except llm.LLMUnreachableError as exc:
         print(f"[yuri] task guide: vision call failed ({type(exc).__name__}): {exc}", file=sys.stderr)
         return None
@@ -298,7 +299,7 @@ async def maybe_update_task(user_text: str) -> str | None:
     ]
     raw_output = ""
     try:
-        async for delta in llm.stream_reply(messages):
+        async for delta in router.stream_text("classifier", messages):
             raw_output += delta
     except llm.LLMUnreachableError as exc:
         print(f"[yuri] task guide: detection LLM unreachable, skipping: {exc}", file=sys.stderr)

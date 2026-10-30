@@ -55,6 +55,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import camera
 import context_budget
 import llm
+import router
 import look_intent
 import ocr_watch
 import stt
@@ -69,9 +70,21 @@ from tools import vision
 from tts import synthesize
 
 async def _startup_model_checks() -> None:
-    """Capability report first (cheap, answers fast), then the warm-up load."""
+    """Capability report first (cheap, answers fast), then the warm-up load,
+    then the router's catalog/spend state. Never raises."""
     await llm.report_model_capabilities()
     await llm.warm_up_model()
+    try:
+        rt = router.get_router()
+        cloud = await rt.startup()
+        print(
+            f"[yuri] router: mode={rt.config.routing.mode} "
+            f"cloud={'available' if cloud else 'local-only'} "
+            f"catalog={len(rt.catalog.model_ids())} models",
+            flush=True,
+        )
+    except Exception as exc:  # noqa: BLE001 -- diagnostics must never stop startup
+        print(f"[yuri] router startup skipped: {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
 @contextlib.asynccontextmanager
@@ -457,7 +470,7 @@ async def _run_turn(
     try:
         for _ in range(MAX_TOOL_ROUNDS):
             saw_tool_call = False
-            async for event in llm.stream_reply_with_tools(
+            async for event in router.stream_with_tools("reflex", 
                 _fit_for_llm(messages_for_llm, offered_tools, tool_messages) + tool_messages,
                 offered_tools,
             ):
@@ -678,7 +691,7 @@ async def _run_task_guide_check(
     prompt = _drift_prompt(task_description, result["note"] or "something unrelated is on screen")
     try:
         buffer = ""
-        async for delta in llm.stream_reply(
+        async for delta in router.stream_text("reflex", 
             _fit_for_llm(history + [{"role": "user", "content": prompt}])
         ):
             buffer += delta
@@ -787,7 +800,7 @@ async def _run_ocr_watch_check(
     prompt = _ambient_comment_prompt(result["note"])
     try:
         buffer = ""
-        async for delta in llm.stream_reply(
+        async for delta in router.stream_text("reflex", 
             _fit_for_llm(history + [{"role": "user", "content": prompt}])
         ):
             buffer += delta
@@ -1238,7 +1251,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
                         "not a generic guess."
                     )
                     try:
-                        description = await llm.describe_image(prompt, content)
+                        description = await router.describe_image("vision", prompt, content)
                     except llm.LLMUnreachableError as exc:
                         print(f"[yuri] describe_image failed for upload: {exc}", file=sys.stderr)
                         await _send_speak(websocket, apply_persona_pass(UPLOAD_VISION_UNREACHABLE_LINE))

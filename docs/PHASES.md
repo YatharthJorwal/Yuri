@@ -19,7 +19,7 @@ needs tiers) and P5 (it needs affect to sound right).
 | Phase | Status | Plan | Size |
 | --- | --- | --- | --- |
 | 0 Bootstrap | **done** | this file | M |
-| 1 Foundation + router | next | [PHASE-1-ROUTER.md](PHASE-1-ROUTER.md) | L |
+| 1 Foundation + router | **core landed** | [PHASE-1-ROUTER.md](PHASE-1-ROUTER.md) | L |
 | 2 Fast path (voice) | not started | [PHASE-2-FAST-PATH.md](PHASE-2-FAST-PATH.md) | L |
 | 3 Memory v2 | not started | [PHASE-3-MEMORY.md](PHASE-3-MEMORY.md) | M |
 | 4 Agent core | not started | [PHASE-4-AGENT-CORE.md](PHASE-4-AGENT-CORE.md) | L |
@@ -79,7 +79,13 @@ differently from Luna here, it is a porting bug.
 behavior unchanged. Full plan: [PHASE-1-ROUTER.md](PHASE-1-ROUTER.md).
 
 Already landed in P0: `bus.py`, the config v2 loader with startup validation, and
-`speech.py`. What remains:
+`speech.py`.
+
+**Status: core landed.** What exists now: `router/` (decision, both providers,
+catalog, budget ledger, audit, redaction), every consumer switched to roles, the
+`check.py` CLI, 77 router/secrets tests, and a live catalog fetch verified at 341
+models. What remains before the gate: a week of real shadow traffic with the key
+in place, then the decision on whether `mind` should be enforced.
 
 Deliverables:
 
@@ -89,11 +95,11 @@ Deliverables:
 - `Router.complete(role, request)` as the only model entry point; `app.py`,
   `task_guide.py`, `ocr_watch.py` and the memory modules switched role by role.
 - `shadow` mode fully wired, `enforce` per role but off.
-- `python -m orchestrator --check` prints resolved chains and catalog status.
+- `orchestrator/check.py` prints resolved chains, key status, catalog and spend.
 
 Gate:
 
-- All of `ROUTING.md` §12 passes.
+- All of `ROUTING.md` §12 passes. (Done in tests; the live half needs a real key.)
 - 50 replayed turns in shadow with zero cloud calls and one audit row each.
 - Luna's test suite still passes through the new seams, and a fixed-input reflex
   replay hashes identically before and after each wiring commit.

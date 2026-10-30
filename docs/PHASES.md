@@ -14,6 +14,24 @@ P0 bootstrap ──> P1 foundation + router ──> P2 fast path ──> P3 memo
 P3 and P4 are independent after P2 and can swap order. P6 depends on P4 (it
 needs tiers) and P5 (it needs affect to sound right).
 
+## Status
+
+| Phase | Status | Plan | Size |
+| --- | --- | --- | --- |
+| 0 Bootstrap | **done** | this file | M |
+| 1 Foundation + router | next | [PHASE-1-ROUTER.md](PHASE-1-ROUTER.md) | L |
+| 2 Fast path (voice) | not started | [PHASE-2-FAST-PATH.md](PHASE-2-FAST-PATH.md) | L |
+| 3 Memory v2 | not started | [PHASE-3-MEMORY.md](PHASE-3-MEMORY.md) | M |
+| 4 Agent core | not started | [PHASE-4-AGENT-CORE.md](PHASE-4-AGENT-CORE.md) | L |
+| 5 Affect + avatar | not started | [PHASE-5-AFFECT.md](PHASE-5-AFFECT.md) | M |
+| 6 Proactivity | not started | [PHASE-6-PROACTIVITY.md](PHASE-6-PROACTIVITY.md) | M |
+| 7 Evals + docs | not started | [PHASE-7-EVALS.md](PHASE-7-EVALS.md) | S, continuous |
+
+Each phase plan is the contract for that phase: components, config, tests, gate,
+and the risks worth knowing before work starts. `PHASE-2-FAST-PATH.md` and the
+others are deliberately more detailed than a task list, because the expensive
+mistakes in this project have all been integration mistakes.
+
 ---
 
 ## Phase 0 — Bootstrap (M)
@@ -34,11 +52,21 @@ Deliverables:
 
 Gate:
 
-- `pytest orchestrator/` passes with the same count as Luna (314).
-- `npm run test:fe` passes (13), `npx tsc --noEmit`, `npx vite build`.
+- `pytest orchestrator/` passes with at least Luna's count (314).
+- `npm run test:fe` passes (13 when ported), `npx tsc --noEmit`, `npx vite build`.
 - App launches, VRM renders, a typed message gets a reply, TTS plays.
 - `nvidia-smi` shows one model resident, not two.
 - Kill the supervisor with the window: no orphan Python, SoVITS, or Ollama child.
+
+**Status: done** (commits `36b5332`..`3b825d2`), with evidence:
+
+- 386 pytest (Luna's 314 plus `test_speech.py` and `test_bus.py`), 49 frontend
+  tests, `tsc --noEmit`, `vite build`, `cargo check` all green.
+- Config v2, the event bus, and the speech normalizer landed here rather than in
+  P1, because the config loader is the thing everything else reads.
+- The desktop-only parts of the gate (live VRM, audio out, single resident
+  model, no orphans) are **not verified yet**: they need the user's model file
+  and speakers. They block nothing in P1 and are tracked in the README.
 
 Non-goals: no router, no bus refactor, no new behavior. If something behaves
 differently from Luna here, it is a porting bug.
@@ -47,30 +75,28 @@ differently from Luna here, it is a porting bug.
 
 ## Phase 1 — Foundation + router (L)
 
-**Goal:** typed services on one bus, and the router in shadow mode. Behavior of
-the conversation is still exactly Luna's.
+**Goal:** every model call goes through one router, in shadow mode, with
+behavior unchanged. Full plan: [PHASE-1-ROUTER.md](PHASE-1-ROUTER.md).
+
+Already landed in P0: `bus.py`, the config v2 loader with startup validation, and
+`speech.py`. What remains:
 
 Deliverables:
 
-- `bus.py`: the envelope in `SCOPE.md` §6, per-type validation, an in-memory
-  replayable log for tests.
-- Logical service extraction from `app.py`: `turn`, `voice`, `mind`, `memory`,
-  `perception`, `scheduler`, `tools`. Same code, different seams.
-- `router/`: `providers/ollama_native.py`, `providers/airouter.py`, decision
-  function, budget meter, audit writer, discovery + cache.
-- `/v1/models` discovery, `zdr` preference, fail-closed behavior.
-- `shadow` mode fully wired, `enforce` available per role but off.
-- `speech.py` skeleton with the rule table (full behavior lands in P2).
-- Startup validation for illegal configs (cloud in a local-only role).
+- `router/`: `providers/ollama_native.py` (behavior-preserving move of `llm.py`),
+  `providers/airouter.py`, `decision.py` (pure), `budget.py`, `audit.py`,
+  `redact.py`, `discovery.py` with a cached `/v1/models` catalog.
+- `Router.complete(role, request)` as the only model entry point; `app.py`,
+  `task_guide.py`, `ocr_watch.py` and the memory modules switched role by role.
+- `shadow` mode fully wired, `enforce` per role but off.
+- `python -m orchestrator --check` prints resolved chains and catalog status.
 
 Gate:
 
 - All of `ROUTING.md` §12 passes.
-- A week of shadow logs (or 50 replayed turns) shows decisions with reason codes
-  and zero cloud calls.
-- Luna's test suite still passes through the new seams.
-- `python -m yuri --config config/config.yaml --check` validates a config and
-  prints the resolved chains without starting the app.
+- 50 replayed turns in shadow with zero cloud calls and one audit row each.
+- Luna's test suite still passes through the new seams, and a fixed-input reflex
+  replay hashes identically before and after each wiring commit.
 
 Non-goals: no prompt changes, no persona changes, no memory changes, no
 streaming.
@@ -103,6 +129,8 @@ Non-goals: no cloud, no proactivity, no affect-driven voice style.
 
 ## Phase 3 — Memory v2 (M)
 
+Full plan: [PHASE-3-MEMORY.md](PHASE-3-MEMORY.md).
+
 **Goal:** memory that survives a hard kill and corrects itself.
 
 Deliverables: facts with source + confidence, episode summaries + embeddings
@@ -124,6 +152,8 @@ Non-goals: no cloud memory, no multi-store, no graph DB.
 ---
 
 ## Phase 4 — Agent core (L)
+
+Full plan: [PHASE-4-AGENT-CORE.md](PHASE-4-AGENT-CORE.md).
 
 **Goal:** Mind runs jobs, tools are typed and tiered, confirmation cannot be
 bypassed.
@@ -149,6 +179,8 @@ Non-goals: no computer control, no mouse/keyboard, no third-party messaging.
 
 ## Phase 5 — Affect + avatar (M)
 
+Full plan: [PHASE-5-AFFECT.md](PHASE-5-AFFECT.md).
+
 **Goal:** she looks alive and her mood is a state, not a random loop.
 
 Deliverables: affect vector (mood, energy, affection, irritation) updated by
@@ -168,6 +200,8 @@ Non-goals: no animation pack expansion, no sandbox apartment, no new VRM assets.
 ---
 
 ## Phase 6 — Proactivity (M)
+
+Full plan: [PHASE-6-PROACTIVITY.md](PHASE-6-PROACTIVITY.md).
 
 **Goal:** she can start something, and she knows when not to.
 
@@ -190,6 +224,8 @@ Non-goals: no social feeds, no other recipients, no calendar integration.
 ---
 
 ## Phase 7 — Evals and docs (S, continuous)
+
+Full plan: [PHASE-7-EVALS.md](PHASE-7-EVALS.md).
 
 **Goal:** the suite that keeps the previous six phases honest.
 

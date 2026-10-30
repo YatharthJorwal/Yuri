@@ -90,10 +90,22 @@ use fakes.
 | [docs/SPEC-v0.1.md](docs/SPEC-v0.1.md) | The starting spec, kept verbatim for provenance |
 | [docs/SCOPE.md](docs/SCOPE.md) | What Yuri is, what changes from the spec, what is out of scope |
 | [docs/ROUTING.md](docs/ROUTING.md) | When a call goes local and when it goes to AI Router |
-| [docs/PHASES.md](docs/PHASES.md) | Phase 0-7 with gates and non-goals |
-| [docs/PHASE-2-FAST-PATH.md](docs/PHASE-2-FAST-PATH.md) | Streaming voice, barge-in, latency budget |
+| [docs/PHASES.md](docs/PHASES.md) | Phase status, gates, and the roadmap index |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decision log (D-001...) |
 | [config/config.example.yaml](config/config.example.yaml) | The config surface, annotated |
+
+Per-phase plans (the contract for each phase: components, config, tests, gate,
+risks):
+
+| Phase | Plan |
+| --- | --- |
+| 1 — foundation + router | [docs/PHASE-1-ROUTER.md](docs/PHASE-1-ROUTER.md) |
+| 2 — fast path (streaming voice, barge-in) | [docs/PHASE-2-FAST-PATH.md](docs/PHASE-2-FAST-PATH.md) |
+| 3 — memory v2 | [docs/PHASE-3-MEMORY.md](docs/PHASE-3-MEMORY.md) |
+| 4 — agent core (tools, tiers, Mind jobs) | [docs/PHASE-4-AGENT-CORE.md](docs/PHASE-4-AGENT-CORE.md) |
+| 5 — affect + avatar life | [docs/PHASE-5-AFFECT.md](docs/PHASE-5-AFFECT.md) |
+| 6 — proactivity + owner ping | [docs/PHASE-6-PROACTIVITY.md](docs/PHASE-6-PROACTIVITY.md) |
+| 7 — evals + docs | [docs/PHASE-7-EVALS.md](docs/PHASE-7-EVALS.md) |
 
 ## Layout
 

@@ -394,6 +394,30 @@ child lifecycle when the app starts).
 **Cost.** A clause can be synthesized that an abort then discards.
 "
 
+## D-022 — Energy VAD, not Silero, and barge-in cancels the turn
+
+**Decision.** Voice input streams 20 ms PCM16 frames from the shell; `vad.py`
+decides start/end from frame energy above an adaptive noise floor, with pre-roll,
+minimum and maximum utterance bounds. No new dependency. Barge-in is VAD speech
+during an active turn: the server emits `barge_in`, cancels the turn, and the
+shell stops playback.
+
+**Why.** Silero would mean onnxruntime (and in practice torch) in the
+orchestrator's Python 3.13 environment for a decision a room mic makes easy.
+Energy VAD is testable with synthetic frames, which is why this landed with tests
+instead of "unverified on the user's machine". Barge-in has to be
+server-authoritative: the shell cannot tell the user from her own playback.
+
+**Rejected.** Shipping MediaRecorder clips with a VAD pass over the decoded file
+(too late to interrupt anything); Silero first (a dependency and an untested
+model for the same behavior).
+
+**Cost.** A loud fan or a TV can still trigger a false start; the adaptive floor
+and `margin_db` are the knobs, and the half-duplex fallback from D-016 remains
+available if the 1/20 gate fails on the real desk.
+
+---
+
 ## Superseded / historical
 
 - **D-002 (first version).** "Groq is the cloud provider" was drafted before the

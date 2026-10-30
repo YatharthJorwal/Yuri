@@ -6,10 +6,11 @@ Local-first, agent-first companion for a single Windows PC. Successor to Luna.
 path).** The port and config v2 are green; every model call goes through the
 router (decision function, local + AI Router providers, spend caps, redaction,
 audit); and the voice path now normalizes every spoken line in code, pipelines
-TTS one clause ahead of the model, and writes a latency row per turn. Microphone
-input, VAD, the arbiter and barge-in are the rest of Phase 2.
+TTS one clause ahead of the model, and writes a latency row per turn. Voice input
+streams 20 ms frames to an energy VAD, barge-in cancels the turn and tells the
+shell to stop playback, and one arbiter decides who may make sound.
 
-Verified in this environment: `512` pytest, `49` frontend tests, `tsc --noEmit`,
+Verified in this environment: `534` pytest, `49` frontend tests, `tsc --noEmit`,
 `vite build`, `cargo check`, a live `/v1/models` fetch (341 models), a real cloud
 completion through the router (`mind` -> `deepseek-v4-flash`, 10/3 tokens,
 $0.000002, audit row and spend ledger written), and a real GPT-SoVITS synthesis
@@ -69,7 +70,7 @@ the avatar still breathes, blinks and glances, because those are procedural.
 ## Tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 512
+.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 534
 npm run test:fe                                        # 49
 npx tsc --noEmit
 npm run build

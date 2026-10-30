@@ -90,5 +90,5 @@ def test_prompt_no_longer_promises_a_task_tool():
 def test_prompt_says_a_look_is_usually_already_done_for_her():
     lowered = SYSTEM_PROMPT.lower()
     assert "already been done for you" in lowered
-    assert "do not call a tool to look again" in lowered
+    assert "never answer a look again request with what you saw last time" in lowered
     assert "call the tool again right then" not in lowered

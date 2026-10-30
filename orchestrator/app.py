@@ -54,6 +54,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 import camera
 import context_budget
+import arbiter
 import latency
 import llm
 import router
@@ -66,6 +67,8 @@ import stt
 import task_guide
 import tools
 import tts
+import vad
+import voice
 from chunking import extract_ready_chunks, flush
 from config import CONFIG
 from memory import consolidation, forget, recall, store
@@ -75,6 +78,9 @@ from tools import vision
 
 # One recorder for the process; every turn appends one row.
 LATENCY = latency.LatencyRecorder()
+# One mouth for the process: voice turns, ambient remarks and Task Guide chides
+# all ask this before making sound (PHASE-2-FAST-PATH.md §4).
+ARBITER = arbiter.Arbiter()
 
 async def _startup_model_checks() -> None:
     """Capability report first (cheap, answers fast), then the warm-up load,
@@ -421,6 +427,7 @@ async def _run_turn(
     if temp_turn_flags is not None:
         temp_turn_flags.append(temp_mode)
     timings = LATENCY.begin()
+    ARBITER.on_turn_started()
     # Phase 4 Round 2: any real user turn counts as "they're still here,"
     # regardless of whether it's about the tracked task at all -- resets
     # Task Guide Mode's idle clock (see task_guide.is_idle/_task_guide_loop
@@ -488,9 +495,13 @@ async def _run_turn(
     # Pipelined voice: clauses go in as the model writes them, audio comes out
     # in order, synthesizing one clause ahead of playback. The old path awaited
     # TTS inside this loop, so the model's next sentence waited on the voice.
+    def _first_audio() -> None:
+        timings.mark("first_audio")
+        ARBITER.on_first_audio()
+
     stream = speech_stream.SpeechStream(
         send=lambda display, audio: _send_audio(websocket, display, audio),
-        on_first_audio=lambda: timings.mark("first_audio"),
+        on_first_audio=_first_audio,
     )
     # Everything actually sent to _send_speak this turn, in order --
     # tracked separately from reply_parts because the two lists serve
@@ -628,6 +639,7 @@ async def _run_turn(
         # Stop-button cancellation and unexpected failures land here too; abort
         # is idempotent and a no-op after a normal close().
         stream.abort()
+        ARBITER.on_turn_finished()
         LATENCY.finish(timings, clauses=len(reply_parts), spoken=len(spoken_parts))
         # Awaiting here, inside `finally`, after a possible cancellation
         # above is safe: the cancellation that got us here already fired
@@ -757,6 +769,10 @@ async def _run_task_guide_check(
     if not reply_parts:
         return
 
+    allowed, reason = ARBITER.may_speak_ambient()
+    if not allowed:
+        print(f"[yuri] task guide: chide suppressed ({reason})", file=sys.stderr)
+        return
     for chunk in reply_parts:
         await _send_speak(websocket, apply_persona_pass(chunk))
 
@@ -866,6 +882,10 @@ async def _run_ocr_watch_check(
     if not reply_parts:
         return
 
+    allowed, reason = ARBITER.may_speak_ambient()
+    if not allowed:
+        print(f"[yuri] ocr watch: comment suppressed ({reason})", file=sys.stderr)
+        return
     for chunk in reply_parts:
         await _send_speak(websocket, apply_persona_pass(chunk))
 
@@ -968,6 +988,61 @@ async def ws_endpoint(websocket: WebSocket) -> None:
     # socket until a turn finished -- a "stop" message would just sit
     # unread in the transport buffer until it was too late to matter.
     current_turn_task: asyncio.Task | None = None
+
+    # Streaming voice: 20 ms PCM frames from this connection's open mic. The
+    # VAD decides start/end; the WAV goes straight to faster-whisper. Per
+    # connection, like history, because two windows have two microphones.
+    voice_input = voice.VoiceInput(
+        vad.VADConfig(
+            end_silence_ms=int(CONFIG.voice.vad.get("end_silence_ms", 500)),
+            min_utterance_ms=int(CONFIG.voice.vad.get("min_utterance_ms", 250)),
+            max_utterance_ms=int(CONFIG.voice.vad.get("max_utterance_ms", 30000)),
+            pre_roll_ms=int(CONFIG.voice.vad.get("pre_roll_ms", 200)),
+        )
+    )
+
+    async def _on_voice_event(event: str | None) -> None:
+        """VAD said something happened. Barge-in is the important half: if she
+        is mid-reply and the user starts talking, playback stops and the turn
+        is cancelled before a single further clause is spoken."""
+        nonlocal current_turn_task
+        if not CONFIG.voice.enabled:
+            return
+        if event == vad.SPEECH_STARTED:
+            ARBITER.on_speech_started()
+            await websocket.send_json({"type": "speech_state", "state": ARBITER.state})
+            if current_turn_task is not None and not current_turn_task.done():
+                ARBITER.on_barge_in()
+                await websocket.send_json({"type": "barge_in"})
+                current_turn_task.cancel()
+            return
+        if event != vad.SPEECH_ENDED:
+            return
+
+        ARBITER.on_speech_ended()
+        wav = voice_input.take_wav()
+        if wav is None:
+            await websocket.send_json({"type": "speech_state", "state": ARBITER.state})
+            return
+        try:
+            user_text = (await stt.transcribe(wav)).strip()
+        except stt.STTError as exc:
+            print(f"[yuri] voice: STT failed: {exc}", file=sys.stderr)
+            await websocket.send_json({"type": "transcript", "text": ""})
+            await websocket.send_json(
+                {"type": "turn_end", "emotion": EMOTION_STT_UNREACHABLE}
+            )
+            ARBITER.on_turn_finished()
+            return
+        await websocket.send_json({"type": "transcript", "text": user_text})
+        if not user_text:
+            ARBITER.on_turn_finished()
+            return
+        if current_turn_task is not None and not current_turn_task.done():
+            current_turn_task.cancel()
+        current_turn_task = asyncio.create_task(
+            _run_turn(websocket, history, user_text, temp_mode, temp_turn_flags)
+        )
 
     # Phase 4 Round 2 -- Task Guide Mode's scheduled-capture loop, one
     # per *driver* connection only (an observer window never starts
@@ -1235,6 +1310,18 @@ async def ws_endpoint(websocket: WebSocket) -> None:
                 # never coming.
                 await _send_speak(websocket, apply_persona_pass(SURFACE_BUSY_LINE))
                 await websocket.send_json({"type": "turn_end", "emotion": EMOTION_SURFACE_BUSY})
+                continue
+
+            if msg_type == "audio_frame":
+                try:
+                    pcm = base64.b64decode(data.get("pcm_b64") or "")
+                except ValueError:
+                    continue
+                await _on_voice_event(voice_input.push(pcm))
+                continue
+
+            if msg_type == "audio_end":
+                await _on_voice_event(voice_input.flush())
                 continue
 
             if msg_type == "user_text":

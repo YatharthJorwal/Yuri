@@ -138,6 +138,19 @@ export type SettingsMessage = {
   mode: string;
 };
 
+/** The orchestrator's view of the conversation's audio state, driven by the
+ * VAD: listening after speech starts, thinking after it ends. */
+export type SpeechStateMessage = {
+  type: "speech_state";
+  state: string;
+};
+
+/** She was talking and the user talked over her. Playback must stop now; the
+ * server has already cancelled the turn. */
+export type BargeInMessage = {
+  type: "barge_in";
+};
+
 export type ConnectionState = "offline" | "connected" | "listening";
 
 interface WsClientOptions {
@@ -161,6 +174,10 @@ interface WsClientOptions {
   /** Fired on connect and whenever the API-model switch changes (the tray and
    * the quick-action menu both drive the same server state). */
   onSettings?: (msg: SettingsMessage) => void;
+  /** VAD state changes, for the UI's listening indicator. */
+  onSpeechState?: (msg: SpeechStateMessage) => void;
+  /** The user interrupted her; drop audio and the reply. */
+  onBargeIn?: () => void;
   /** Optional since it's new -- a caller that doesn't care about
    * driver/observer status (there isn't one today, but keeping this
    * optional rather than required avoids forcing every future caller to
@@ -211,7 +228,9 @@ export class WsClient {
         | SurfaceStatusMessage
         | LogMessage
         | RequestCameraFrameMessage
-        | SettingsMessage;
+        | SettingsMessage
+        | SpeechStateMessage
+        | BargeInMessage;
       try {
         parsed = JSON.parse(event.data);
       } catch {
@@ -233,6 +252,10 @@ export class WsClient {
         this.opts.onRequestCameraFrame?.();
       } else if (parsed.type === "settings") {
         this.opts.onSettings?.(parsed);
+      } else if (parsed.type === "speech_state") {
+        this.opts.onSpeechState?.(parsed);
+      } else if (parsed.type === "barge_in") {
+        this.opts.onBargeIn?.();
       }
     });
 
@@ -361,6 +384,21 @@ export class WsClient {
   sendSetApiModel(enabled: boolean): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(JSON.stringify({ type: "set_api_model", enabled }));
+  }
+
+  /** One 20 ms PCM16 frame at 16 kHz, base64. Fire-and-forget: the VAD on the
+   * other side decides what to do with it, and a dropped frame is a dropped
+   * 20 ms, not an error worth surfacing. */
+  sendAudioFrame(pcmB64: string): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify({ type: "audio_frame", pcm_b64: pcmB64 }));
+  }
+
+  /** The mic was released (button or F9). Ends the in-progress utterance now
+   * instead of waiting out the silence threshold. */
+  sendAudioEnd(): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify({ type: "audio_end" }));
   }
 
   /** Answers a request_camera_frame (see onRequestCameraFrame in

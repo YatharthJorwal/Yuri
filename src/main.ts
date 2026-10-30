@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { WsClient, type ConnectionState, type SpeakMessage, type TranscriptMessage, type LogMessage, type SettingsMessage } from "./ws-client";import { speakWithLipsync, getMouthOpenValue, getSpeechProgress } from "./lipsync";
 import { logVrmReport } from "./vrm-report";
-import { MicInput, blobToBase64 } from "./mic";
+import { MicStream } from "./mic-stream";
 import { CameraInput } from "./camera";
 import { classifyFile, resizeImageToBase64Jpeg, readTextFile } from "./file-upload";
 import { IDLE_BONE_NAMES, applyIdleOffsets, idleOffsets } from "./idle-motion";
@@ -748,6 +748,22 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
     // Server-owned switch; see renderApiModel. Fires on connect and after every
     // change, so the tray and the menu badge always agree.
     onSettings: (msg) => renderApiModel(msg),
+    // Barge-in: she was talking, the user cut in. The server already cancelled
+    // the turn; kill the audio and the queue here too so it stops instantly.
+    onBargeIn: () => {
+      turnStopped = true;
+      queue.stopAll();
+      orchestratorDone = true;
+      audioIdle = true;
+      recomputeTurnActive();
+      setTargetEmotion("neutral");
+    },
+    // A new utterance has ended and a turn is starting: allow its chunks again
+    // (barge-in sets turnStopped, and nothing else would clear it on the voice
+    // path the way submitTurn does for typed input).
+    onSpeechState: (msg) => {
+      if (msg.state === "thinking") turnStopped = false;
+    },
     // Resend UI-held toggle state whenever the socket (re)opens: the send
     // helpers drop messages while the socket isn't OPEN, so a toggle clicked
     // during startup or a reconnect never reached the orchestrator. Temp
@@ -983,27 +999,30 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
     setQuickActionMenuOpen(false);
   });
 
-  const mic = new MicInput({
-    onRecordingChange: (recording) => {
-      micButton.classList.toggle("recording", recording);
-      micButton.setAttribute("aria-pressed", String(recording));
-    },
-    onClip: async (blob) => {
-      const audioB64 = await blobToBase64(blob);
-      client.sendUserAudio(audioB64);
-      orchestratorDone = false;
-      turnStopped = false;
-      recomputeTurnActive();
+  // Streaming mic: 20 ms PCM frames go to the orchestrator's VAD, which decides
+  // when the user started and stopped talking (orchestrator/vad.py). The old
+  // whole-clip path could only react after release, so she could not be
+  // interrupted and end-of-speech depended on a button.
+  const mic = new MicStream({
+    onFrame: (pcmB64) => client.sendAudioFrame(pcmB64),
+    onActiveChange: (active) => {
+      micButton.classList.toggle("recording", active);
+      micButton.setAttribute("aria-pressed", String(active));
+      // Released: end the utterance now rather than waiting out 500 ms of
+      // silence (F9 push-to-talk in particular should feel immediate).
+      if (!active) client.sendAudioEnd();
     },
     onError: (err) => {
-      // Most likely mic permission denied, or no input device -- nothing
-      // client-side to recover from beyond logging; the user can grant
-      // permission (or plug in a mic) and click again.
       console.error("[yuri] mic capture failed -- check mic permission", err);
     },
   });
   micButton.addEventListener("click", () => {
-    mic.toggle();
+    if (mic.isActive) {
+      void mic.stop();
+    } else {
+      turnStopped = false;
+      void mic.start();
+    }
   });
 
   // Quick-action menu's Camera toggle (Phase 5) -- see camera.ts's own
@@ -1091,9 +1110,10 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
   listen<string>("hotkey-talk", (event) => {
     if (turnActive || observerLocked) return;
     if (event.payload === "pressed") {
-      mic.start();
+      turnStopped = false;
+      void mic.start();
     } else if (event.payload === "released") {
-      mic.stop();
+      void mic.stop();
     }
   }).catch((err) => {
     console.error("[yuri] couldn't attach F9 push-to-talk listener", err);

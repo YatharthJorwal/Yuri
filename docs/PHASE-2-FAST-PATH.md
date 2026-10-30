@@ -14,9 +14,11 @@ every spoken path, including fallbacks and ambient remarks, is normalized);
 `speech_stream.py` pipelining (clause queue, one-clause synthesis lookahead,
 abort); `latency.py` with one JSONL row per turn; and `tts.ensure_server()` with
 a port-first managed launch. Verified against the real server: 227 KB WAV from
-`/tts`. Remaining: microphone frames, VAD, the arbiter/barge-in, and the §5
-latency *targets* measured over a 20-turn run (the instrumentation exists; the
-gate does not).
+`/tts`. Since: streaming 20 ms PCM frames from the shell, an energy VAD with an adaptive
+noise floor, WAV packaging for STT, one arbiter gating every unprompted line, and
+barge-in (VAD speech during a turn cancels it and sends `barge_in`, which stops
+playback). Remaining: the §5 latency *targets* measured over a real 20-turn
+microphone run; the instrumentation exists, the gate does not.
 
 ---
 

@@ -114,11 +114,13 @@ streaming.
 **Goal:** talking feels instant, and she can be interrupted. Details are in
 `PHASE-2-FAST-PATH.md`; this is the summary.
 
-**Status: in progress (speech path).** Landed: normalization enforced in
+**Status: voice path landed; latency gate pending.** Landed: normalization in
 `_send_speak` for every spoken path, pipelined clause synthesis
-(`speech_stream.py`), per-turn latency rows (`latency.py`), and the port-first
-GPT-SoVITS launcher/health check. Remaining: mic frames → VAD, the arbiter and
-barge-in, and the measured latency gate.
+(`speech_stream.py`), per-turn latency rows (`latency.py`), the port-first
+GPT-SoVITS launcher, streaming 20 ms mic frames (`mic-stream.ts`), an energy VAD
+with an adaptive noise floor (`vad.py`), WAV-to-STT (`voice.py`), one arbiter
+(`arbiter.py`), and barge-in that cancels the turn and stops playback. Remaining:
+the measured 20-turn latency gate on a real microphone.
 
 Deliverables: streaming reflex replies, `speech.py` enforced on every spoken
 string, streaming GPT-SoVITS with clause pipelining, VAD + faster-whisper input,

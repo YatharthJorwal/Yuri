@@ -54,27 +54,41 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 import camera
 import context_budget
+import latency
 import llm
 import router
 import settings as runtime_settings
 import look_intent
 import ocr_watch
+import speech
+import speech_stream
 import stt
 import task_guide
 import tools
+import tts
 from chunking import extract_ready_chunks, flush
 from config import CONFIG
 from memory import consolidation, forget, recall, store
 from memory.db import MemoryUnavailableError
 from persona import SYSTEM_PROMPT, apply_persona_pass, extract_emotion_tag
 from tools import vision
-from tts import synthesize
+
+# One recorder for the process; every turn appends one row.
+LATENCY = latency.LatencyRecorder()
 
 async def _startup_model_checks() -> None:
     """Capability report first (cheap, answers fast), then the warm-up load,
-    then the router's catalog/spend state. Never raises."""
+    then the TTS server and the router's catalog/spend state. Never raises."""
     await llm.report_model_capabilities()
     await llm.warm_up_model()
+    try:
+        up = await tts.ensure_server()
+        print(
+            f"[yuri] tts: gpt_sovits {'up' if up else 'unavailable (pyttsx3 fallback)'}",
+            flush=True,
+        )
+    except Exception as exc:  # noqa: BLE001 -- voice diagnostics must not stop startup
+        print(f"[yuri] tts startup check skipped: {type(exc).__name__}: {exc}", file=sys.stderr)
     try:
         rt = router.get_router()
         cloud = await rt.startup()
@@ -250,16 +264,28 @@ TASK_GUIDE_POLL_SECONDS = 15
 OCR_WATCH_POLL_SECONDS = 30
 
 
-async def _send_speak(websocket: WebSocket, text: str) -> None:
-    audio_bytes = await synthesize(text)
+async def _send_audio(websocket: WebSocket, display: str, audio_bytes: bytes) -> None:
+    """One already-synthesized clause. `display` is what the caption shows;
+    the audio may be a normalized version of it (see _send_speak)."""
     await websocket.send_json(
         {
             "type": "speak",
-            "text": text,
+            "text": display,
             "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
             "mime": "audio/wav",
         }
     )
+
+
+async def _send_speak(websocket: WebSocket, text: str) -> None:
+    """Speak one whole line: normalize it for the voice, keep the panel's
+    wording. Every spoken path (a turn, an ambient remark, a fallback line)
+    goes through here, so no em dash or quote ever reaches TTS regardless of
+    what the model wrote."""
+    prepared = speech.prepare(text)
+    if not prepared.spoken:
+        return
+    await _send_audio(websocket, prepared.display, await tts.synthesize(prepared.spoken))
 
 
 async def _log_transcript_turn_safely(user_text: str, assistant_text: str) -> None:
@@ -394,6 +420,7 @@ async def _run_turn(
     history.append({"role": "user", "content": user_text})
     if temp_turn_flags is not None:
         temp_turn_flags.append(temp_mode)
+    timings = LATENCY.begin()
     # Phase 4 Round 2: any real user turn counts as "they're still here,"
     # regardless of whether it's about the tracked task at all -- resets
     # Task Guide Mode's idle clock (see task_guide.is_idle/_task_guide_loop
@@ -458,6 +485,13 @@ async def _run_turn(
 
     buffer = ""
     reply_parts: list[str] = []
+    # Pipelined voice: clauses go in as the model writes them, audio comes out
+    # in order, synthesizing one clause ahead of playback. The old path awaited
+    # TTS inside this loop, so the model's next sentence waited on the voice.
+    stream = speech_stream.SpeechStream(
+        send=lambda display, audio: _send_audio(websocket, display, audio),
+        on_first_audio=lambda: timings.mark("first_audio"),
+    )
     # Everything actually sent to _send_speak this turn, in order --
     # tracked separately from reply_parts because the two lists serve
     # different purposes and can legitimately diverge: reply_parts is what
@@ -507,12 +541,14 @@ async def _run_turn(
                         tool_messages.append({"role": "tool", "content": result_text})
                     break  # re-enter the outer for-loop with results appended
                 buffer += event["text"]
+                timings.mark("first_token")
                 chunks, buffer = extract_ready_chunks(buffer)
                 for chunk in chunks:
                     reply_parts.append(chunk)
                     styled = apply_persona_pass(chunk)
                     spoken_parts.append(styled)
-                    await _send_speak(websocket, styled)
+                    timings.mark("first_clause")
+                    await stream.push(styled)
             if not saw_tool_call:
                 # A normal reply, not another tool call -- stream's fully
                 # done now, not mid-flight, so this is the only safe point
@@ -524,7 +560,9 @@ async def _run_turn(
                     reply_parts.append(chunk)
                     styled = apply_persona_pass(chunk)
                     spoken_parts.append(styled)
-                    await _send_speak(websocket, styled)
+                    timings.mark("first_clause")
+                    await stream.push(styled)
+                await stream.close()
                 break
         else:
             # Used up every round still calling tools, never landed on an
@@ -532,6 +570,7 @@ async def _run_turn(
             # one that keeps failing) shouldn't hang the turn forever.
             # Distinct from LLMUnreachableError below: the server itself
             # is fine, she just never got to a real answer.
+            await stream.close()
             await _send_speak(websocket, TOOL_STUCK_LINE)
             spoken_parts.append(TOOL_STUCK_LINE)
     except llm.LLMUnreachableError as exc:
@@ -540,6 +579,9 @@ async def _run_turn(
         # like "server not running" and left nothing to diagnose from.
         print(f"[yuri] LLM call failed ({type(exc).__name__}): {exc}", file=sys.stderr)
         line = llm_failure_line(exc)
+        # Flush whatever was already generated before the failure -- she may
+        # have said half the reply, and dropping it would look like a cut.
+        await stream.close()
         await _send_speak(websocket, line)
         spoken_parts.append(line)
         detected_emotion = EMOTION_LLM_UNREACHABLE
@@ -555,6 +597,9 @@ async def _run_turn(
         # deliberately NOT caught here -- stop must still cancel the turn.
         print("[yuri] turn failed with an unexpected error (reply cut off):", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
+        # Something in the voice path may have died; make sure a worker task
+        # is not left behind holding clauses nobody will hear.
+        stream.abort()
     finally:
         # In `finally`, not just after the try block, so a stop-button
         # cancellation (asyncio.CancelledError, raised into whichever
@@ -580,6 +625,10 @@ async def _run_turn(
             if temp_turn_flags is not None:
                 temp_turn_flags.pop()
         _trim_history(history, temp_turn_flags)
+        # Stop-button cancellation and unexpected failures land here too; abort
+        # is idempotent and a no-op after a normal close().
+        stream.abort()
+        LATENCY.finish(timings, clauses=len(reply_parts), spoken=len(spoken_parts))
         # Awaiting here, inside `finally`, after a possible cancellation
         # above is safe: the cancellation that got us here already fired
         # once (at whichever `await` this task was sitting on), and

@@ -2,19 +2,20 @@
 
 Local-first, agent-first companion for a single Windows PC. Successor to Luna.
 
-**Status: Phase 0 complete, Phase 1 router core landed.** Luna's shell and
-orchestrator are ported and green, the config surface is v2, the typed event bus
-exists, the speech normalizer keeps em dashes and quotes away from TTS, and every
-model call now goes through the router: one decision function, a local provider, an
-AI Router provider, spend caps, redaction and an audit log. It runs in `shadow`
-mode by default, so nothing leaves the machine until you flip it.
+**Status: Phase 0 complete, Phase 1 router landed, Phase 2 in progress (speech
+path).** The port and config v2 are green; every model call goes through the
+router (decision function, local + AI Router providers, spend caps, redaction,
+audit); and the voice path now normalizes every spoken line in code, pipelines
+TTS one clause ahead of the model, and writes a latency row per turn. Microphone
+input, VAD, the arbiter and barge-in are the rest of Phase 2.
 
-Verified in this environment: `487` pytest, `49` frontend tests, `tsc --noEmit`,
-`vite build`, `cargo check`, a live `/v1/models` fetch (341 models), and one real
-cloud completion through the router (`mind` -> `deepseek-v4-flash`, 10/3 tokens,
-$0.000002, audit row and spend ledger both written). Not yet verified: a real
-desktop launch (needs the VRM file and a warm Ollama), audio output, and the tray
-toggle in a running build.
+Verified in this environment: `512` pytest, `49` frontend tests, `tsc --noEmit`,
+`vite build`, `cargo check`, a live `/v1/models` fetch (341 models), a real cloud
+completion through the router (`mind` -> `deepseek-v4-flash`, 10/3 tokens,
+$0.000002, audit row and spend ledger written), and a real GPT-SoVITS synthesis
+(227 KB WAV from the running server). Not yet verified: a real desktop launch
+(needs the VRM file), the tray toggle in a running build, and anything that needs
+a microphone.
 
 ## Quickstart
 
@@ -68,7 +69,7 @@ the avatar still breathes, blinks and glances, because those are procedural.
 ## Tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 487
+.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 512
 npm run test:fe                                        # 49
 npx tsc --noEmit
 npm run build

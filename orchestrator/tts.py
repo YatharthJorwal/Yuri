@@ -24,8 +24,11 @@ tts.engine, same pattern as the LLM's config-driven backend choice.
 
 import asyncio
 import os
+import socket
+import subprocess
 import sys
 import tempfile
+from urllib.parse import urlparse
 
 import httpx
 import pyttsx3
@@ -125,3 +128,105 @@ async def synthesize(text: str) -> bytes:
             print(f"[yuri] gpt_sovits unreachable, falling back to pyttsx3: {exc}", file=sys.stderr)
 
     return await asyncio.to_thread(_synthesize_pyttsx3_sync, text)
+
+
+# ─── server lifecycle ────────────────────────────────────────────────────────
+# The Tauri shell also tries to start GPT-SoVITS (src-tauri/launcher.local.txt).
+# This is the same check done from the Python side, for two reasons: running the
+# orchestrator standalone should still get a voice, and a launch that lost a race
+# must not start a second server on the same port. Port-first means "already
+# running" is always the answer that wins.
+
+_CREATE_NO_WINDOW = 0x08000000
+
+
+def _service_address(api_url: str) -> tuple[str, int]:
+    parsed = urlparse(api_url)
+    return (parsed.hostname or "127.0.0.1", parsed.port or 9880)
+
+
+def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+async def health() -> bool:
+    """True if the configured TTS server is accepting connections."""
+    if CONFIG.tts.engine != "gpt_sovits":
+        return False
+    host, port = _service_address(CONFIG.tts.gpt_sovits.api_url)
+    return await asyncio.to_thread(_port_open, host, port)
+
+
+def _launch_gpt_sovits() -> subprocess.Popen | None:
+    launch = dict(CONFIG.tts.gpt_sovits.launch or {})
+    if not launch.get("enabled", False):
+        return None
+    python = str(launch.get("python") or "")
+    script = str(launch.get("script") or "")
+    cwd = str(launch.get("cwd") or "")
+    if not (python and script and os.path.isfile(python) and os.path.isfile(script)):
+        print(
+            "[yuri] gpt_sovits: launch paths are missing or wrong "
+            f"(python={python!r}, script={script!r}) -- not starting it",
+            file=sys.stderr,
+        )
+        return None
+    args = [str(part) for part in (launch.get("args") or [])]
+    try:
+        return subprocess.Popen(  # noqa: S603 -- local, configured executable
+            [python, script, *args],
+            cwd=cwd or None,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=_CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+    except OSError as exc:
+        print(f"[yuri] gpt_sovits: could not start the server: {exc}", file=sys.stderr)
+        return None
+
+
+async def ensure_server() -> bool:
+    """Make the TTS server available if it can be. Returns whether it is up.
+
+    Never raises: a missing server means the existing pyttsx3 fallback in
+    `synthesize()` takes over, and the log line says why."""
+    if CONFIG.tts.engine != "gpt_sovits":
+        return False
+    if await health():
+        return True
+
+    launch = dict(CONFIG.tts.gpt_sovits.launch or {})
+    if not launch.get("enabled", False):
+        print(
+            "[yuri] gpt_sovits: not running and launch is disabled -- voice falls "
+            "back to pyttsx3",
+            file=sys.stderr,
+        )
+        return False
+
+    process = await asyncio.to_thread(_launch_gpt_sovits)
+    if process is None:
+        return False
+
+    timeout = float(launch.get("startup_timeout_s", 120))
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        if await health():
+            print("[yuri] gpt_sovits: server is up", flush=True)
+            return True
+        if process.poll() is not None:
+            print(
+                f"[yuri] gpt_sovits: exited during startup (code {process.returncode})",
+                file=sys.stderr,
+            )
+            return False
+        await asyncio.sleep(1.0)
+    print(
+        f"[yuri] gpt_sovits: still not listening after {timeout:.0f}s -- using pyttsx3",
+        file=sys.stderr,
+    )
+    return False

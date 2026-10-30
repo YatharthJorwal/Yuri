@@ -9,6 +9,15 @@ document defines.
 
 Read with `PHASES.md` (Phase 2), `SCOPE.md` §6 and §9, `ROUTING.md` §3.
 
+**Status (in progress).** Landed: `speech.py` enforced inside `_send_speak` (so
+every spoken path, including fallbacks and ambient remarks, is normalized);
+`speech_stream.py` pipelining (clause queue, one-clause synthesis lookahead,
+abort); `latency.py` with one JSONL row per turn; and `tts.ensure_server()` with
+a port-first managed launch. Verified against the real server: 227 KB WAV from
+`/tts`. Remaining: microphone frames, VAD, the arbiter/barge-in, and the §5
+latency *targets* measured over a 20-turn run (the instrumentation exists; the
+gate does not).
+
 ---
 
 ## 0. Shape of a spoken turn

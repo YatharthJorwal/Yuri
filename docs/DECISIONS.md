@@ -349,6 +349,51 @@ side effect of a config file).
 
 ---
 
+---
+
+## D-020 — Speech is normalized at one chokepoint, before synthesis
+
+**Decision.** _send_speak() is the only function that turns text into audio. It
+runs speech.prepare() and sends the model's wording as the caption while
+synthesizing the normalized text. _run_turn no longer calls synthesize
+directly, and the pipelined stream routes every clause through the same
+_send_audio payload shape.
+
+**Why.** Before this, speech.py existed and was tested but was not on the TTS
+path: turns still sent raw persona text to SoVITS. One chokepoint means ambient
+remarks, Task Guide chides, fallback lines, upload descriptions and normal turns
+all get the same guarantee, and a future path cannot forget it. It also keeps the
+caption honest (the panel shows what she meant, the voice says what it can say).
+
+**Rejected.** Normalizing at each call site (drifts immediately); normalizing
+inside 	ts.py (loses the display/spoken split and the caption would show the
+mangled text).
+
+**Cost.** One extra regex pass per spoken line, and captions sometimes differ
+from the audio in punctuation.
+
+---
+
+## D-021 — TTS synthesis is pipelined one clause ahead, and the launcher is port-first
+
+**Decision.** speech_stream.SpeechStream queues clauses, starts synthesizing the
+next one before awaiting delivery of the current, and aborts by dropping the
+queue. 	ts.ensure_server() checks the port *before* launching, and only launches
+when nothing is listening.
+
+**Why.** The old loop awaited synthesis inside the token stream, so the model's
+next sentence waited on the voice. One-clause lookahead removes that wait without
+reordering anything. The port-first check matters because two launchers exist (the
+Tauri shell and now the Python startup check); whichever runs second must find the
+server rather than start a second copy on the same port.
+
+**Rejected.** Concurrent synthesis with reordering by index (more machinery for
+the same effect at this scale); removing the shell launcher now (it still owns
+child lifecycle when the app starts).
+
+**Cost.** A clause can be synthesized that an abort then discards.
+"
+
 ## Superseded / historical
 
 - **D-002 (first version).** "Groq is the cloud provider" was drafted before the

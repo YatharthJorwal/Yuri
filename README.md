@@ -9,10 +9,12 @@ model call now goes through the router: one decision function, a local provider,
 AI Router provider, spend caps, redaction and an audit log. It runs in `shadow`
 mode by default, so nothing leaves the machine until you flip it.
 
-Verified in this environment: `472` pytest, `49` frontend tests, `tsc --noEmit`,
-`vite build`, `cargo check`, and a live `/v1/models` fetch (341 models, prices and
-`zdr` flags parsed). Not yet verified: a real desktop launch (needs the VRM file
-and a warm Ollama), audio output, and a real cloud completion (needs your key).
+Verified in this environment: `487` pytest, `49` frontend tests, `tsc --noEmit`,
+`vite build`, `cargo check`, a live `/v1/models` fetch (341 models), and one real
+cloud completion through the router (`mind` -> `deepseek-v4-flash`, 10/3 tokens,
+$0.000002, audit row and spend ledger both written). Not yet verified: a real
+desktop launch (needs the VRM file and a warm Ollama), audio output, and the tray
+toggle in a running build.
 
 ## Quickstart
 
@@ -25,8 +27,8 @@ python -m venv .venv
 npm install
 
 # 3. Your AI Router key (optional -- without it every role stays local)
-#    Open .env and paste the key after AIROUTER_API_KEY=
-#    (or copy .env.example to .env first if you deleted it)
+#    Paste it after AIROUTER_API_KEY= in .env (or config/secrets.local.yaml).
+#    Works while Yuri is running: flip the API-model switch and it is picked up.
 
 # 4. Config (optional -- the example is used verbatim when this is absent)
 Copy-Item config\config.example.yaml config\config.yaml
@@ -66,7 +68,7 @@ the avatar still breathes, blinks and glances, because those are procedural.
 ## Tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 486
+.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 487
 npm run test:fe                                        # 49
 npx tsc --noEmit
 npm run build

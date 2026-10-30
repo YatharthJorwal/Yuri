@@ -123,6 +123,37 @@ class Router:
 
     # -- lifecycle -----------------------------------------------------------
 
+    async def ensure_cloud(self) -> bool:
+        """Make cloud usable right now if it can be, without a restart.
+
+        A key pasted into `.env` after launch is picked up here, the provider is
+        built, and a stale/absent catalog is fetched. Returns whether cloud is
+        actually available afterwards. Never raises: a toggle that cannot reach
+        the network must still respond with "no key" instead of an exception.
+        """
+        cloud_cfg = self._cloud_cfg
+        if cloud_cfg is None or not cloud_cfg.enabled:
+            self.state.cloud_available = False
+            return False
+        if self.cloud_provider is None:
+            from config import resolve_api_key
+
+            key = resolve_api_key(cloud_cfg.api_key_env)
+            if key:
+                self.cloud_provider = AirouterProvider(cloud_cfg, key)
+                self._api_key_present = True
+        if self.cloud_provider is None:
+            self.state.cloud_available = False
+            return False
+        try:
+            loaded = self.catalog.load_cache()
+            if not loaded or self.catalog.is_stale():
+                await self.catalog.refresh(force=not loaded)
+        except Exception as exc:  # noqa: BLE001 -- a toggle must not crash the app
+            print(f"[yuri] router: catalog refresh failed: {exc}", flush=True)
+        self.state.cloud_available = bool(self.catalog.available and self._api_key_present)
+        return self.state.cloud_available
+
     async def _ensure_started(self) -> None:
         if self._started:
             return

@@ -55,7 +55,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import camera
 import context_budget
 import llm
-import router
+import router
 import settings as runtime_settings
 import look_intent
 import ocr_watch
@@ -1134,6 +1134,11 @@ async def ws_endpoint(websocket: WebSocket) -> None:
                 # so instead of pretending.
                 enabled = bool(data.get("enabled"))
                 rt = router.get_router()
+                # Picking up a key pasted after launch is the whole point of a
+                # live switch, so try before answering: no restart needed once
+                # AIROUTER_API_KEY appears in .env.
+                if enabled:
+                    await rt.ensure_cloud()
                 runtime_settings.apply(enabled, rt)
                 await websocket.send_json({"type": "settings", **runtime_settings.describe(rt, CONFIG)})
                 state = runtime_settings.describe(rt, CONFIG)

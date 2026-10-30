@@ -322,3 +322,24 @@ async def test_toggle_off_keeps_local_only_roles_local(tmp_path):
 
     assert cloud.calls == []
     assert len(local.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_ensure_cloud_picks_up_a_key_pasted_after_launch(tmp_path, monkeypatch):
+    # Isolated from the real secrets.local.yaml/.env on this machine: the point
+    # is the transition, not whether the developer has a key today.
+    monkeypatch.setattr(config, "resolve_api_key", lambda *args, **kwargs: None)
+    router = Router(
+        make_config(tmp_path),
+        catalog=FakeCatalog(),
+        local_provider=FakeProvider("local_ollama"),
+        cloud_provider=None,
+        audit=AuditWriter(tmp_path / "audit.jsonl"),
+        ledger=SpendLedger(tmp_path / "spend.db"),
+    )
+    assert await router.ensure_cloud() is False
+
+    monkeypatch.setattr(config, "resolve_api_key", lambda *args, **kwargs: "pasted-just-now")
+    assert await router.ensure_cloud() is True
+    assert router.cloud_provider is not None
+    assert router.state.cloud_available is True

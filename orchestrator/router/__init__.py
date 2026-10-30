@@ -99,6 +99,27 @@ class Router:
         self.ledger = ledger or SpendLedger(repo_path(config.budget.ledger_path))
         self.state = RouterState(cloud_available=False)
         self._cloud_cfg: ProviderConfig | None = cloud_cfg
+        # None = follow routing.mode/enforce_roles. True/False = the user's live
+        # choice from the tray/quick-action toggle, which outranks the config
+        # until they change it again (see settings.py).
+        self.use_api_model_override: bool | None = None
+
+    def set_use_api_model(self, enabled: bool | None) -> None:
+        self.use_api_model_override = enabled
+
+    def _enforce(self, role: str) -> bool:
+        """May this role execute a cloud decision right now?"""
+        role_cfg = self.config.roles.get(role) or _default_role(role)
+        if role_cfg.local_only:
+            return False
+        if self.use_api_model_override is False:
+            return False
+        if self.use_api_model_override is True:
+            return True
+        return (
+            self.config.routing.mode == "enforce"
+            and role in self.config.routing.enforce_roles
+        )
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -189,12 +210,12 @@ class Router:
             providers=self.config.providers,
             now=self.clock(),
         )
-        if self.config.routing.mode == "shadow":
+        if not self._enforce(request.role):
             decision = dataclasses.replace(decision, shadow=True)
         return decision
 
     def _execution_chain(self, decision: RouteDecision) -> list[str]:
-        if decision.shadow or decision.role not in self.config.routing.enforce_roles:
+        if decision.shadow or not self._enforce(decision.role):
             # Shadow, or a role we have not opted into: run local, keep the
             # decision as the record of what would have happened.
             local = [c for c in decision.candidates if c.startswith("local_ollama:")]

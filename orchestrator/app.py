@@ -55,7 +55,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import camera
 import context_budget
 import llm
-import router
+import router
+import settings as runtime_settings
 import look_intent
 import ocr_watch
 import stt
@@ -77,10 +78,13 @@ async def _startup_model_checks() -> None:
     try:
         rt = router.get_router()
         cloud = await rt.startup()
+        saved = runtime_settings.initial(CONFIG)
+        rt.set_use_api_model(saved.use_api_model)
         print(
             f"[yuri] router: mode={rt.config.routing.mode} "
             f"cloud={'available' if cloud else 'local-only'} "
-            f"catalog={len(rt.catalog.model_ids())} models",
+            f"catalog={len(rt.catalog.model_ids())} models "
+            f"api-model={'on' if saved.use_api_model else 'off'}",
             flush=True,
         )
     except Exception as exc:  # noqa: BLE001 -- diagnostics must never stop startup
@@ -886,6 +890,10 @@ async def ws_endpoint(websocket: WebSocket) -> None:
     if is_driver:
         _driver = websocket
     await websocket.send_json({"type": "surface_status", "role": "driver" if is_driver else "observer"})
+    # The tray/quick-action "Use API model" switch is server state, not a
+    # frontend preference: a second window (or a reconnect) must see the same
+    # value, and the router is the thing that actually obeys it.
+    await websocket.send_json({"type": "settings", **runtime_settings.describe(router.get_router(), CONFIG)})
 
     history: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     # Quick-action menu's Temp Chat toggle -- per-connection, unlike
@@ -1116,6 +1124,32 @@ async def ws_endpoint(websocket: WebSocket) -> None:
                     f"by the shell (interval {CONFIG.ocr_watch.comment_interval_seconds}s)",
                     file=sys.stderr,
                 )
+                continue
+
+            if msg_type == "set_api_model":
+                # Quick-action menu / tray toggle: may the router execute cloud
+                # decisions? Persisted in data/settings.json so it survives a
+                # restart. Turning it on without a key is allowed and harmless --
+                # the router still reports cloud unavailable, and the reply says
+                # so instead of pretending.
+                enabled = bool(data.get("enabled"))
+                rt = router.get_router()
+                runtime_settings.apply(enabled, rt)
+                await websocket.send_json({"type": "settings", **runtime_settings.describe(rt, CONFIG)})
+                state = runtime_settings.describe(rt, CONFIG)
+                if enabled and not state["cloud_available"]:
+                    print(
+                        "[yuri] api model: ON requested but cloud is unavailable "
+                        "(no AIROUTER_API_KEY, or the catalog could not load) -- "
+                        "Mind stays local.",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"[yuri] api model: {'on' if enabled else 'off'} "
+                        f"(mode={CONFIG.routing.mode})",
+                        file=sys.stderr,
+                    )
                 continue
 
             if msg_type == "camera_frame":

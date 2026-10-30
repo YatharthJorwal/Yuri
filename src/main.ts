@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { listen } from "@tauri-apps/api/event";
-import { WsClient, type ConnectionState, type SpeakMessage, type TranscriptMessage, type LogMessage } from "./ws-client";import { speakWithLipsync, getMouthOpenValue, getSpeechProgress } from "./lipsync";
+import { invoke } from "@tauri-apps/api/core";
+import { WsClient, type ConnectionState, type SpeakMessage, type TranscriptMessage, type LogMessage, type SettingsMessage } from "./ws-client";import { speakWithLipsync, getMouthOpenValue, getSpeechProgress } from "./lipsync";
 import { logVrmReport } from "./vrm-report";
 import { MicInput, blobToBase64 } from "./mic";
 import { CameraInput } from "./camera";
@@ -352,6 +353,8 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
   const qaTempModeState = document.getElementById("qa-temp-mode-state") as HTMLSpanElement;
   const qaOcrWatchButton = document.getElementById("qa-ocr-watch") as HTMLButtonElement;
   const qaOcrWatchState = document.getElementById("qa-ocr-watch-state") as HTMLSpanElement;
+  const qaApiModelButton = document.getElementById("qa-api-model") as HTMLButtonElement;
+  const qaApiModelState = document.getElementById("qa-api-model-state") as HTMLSpanElement;
   const qaCameraButton = document.getElementById("qa-camera") as HTMLButtonElement;
   const qaCameraState = document.getElementById("qa-camera-state") as HTMLSpanElement;
   const qaUploadButton = document.getElementById("qa-upload") as HTMLButtonElement;
@@ -742,6 +745,9 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
   const client = new WsClient({
     surface: "shell",
     onStateChange: setState,
+    // Server-owned switch; see renderApiModel. Fires on connect and after every
+    // change, so the tray and the menu badge always agree.
+    onSettings: (msg) => renderApiModel(msg),
     // Resend UI-held toggle state whenever the socket (re)opens: the send
     // helpers drop messages while the socket isn't OPEN, so a toggle clicked
     // during startup or a reconnect never reached the orchestrator. Temp
@@ -754,8 +760,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
       if (tempModeEnabled) client.sendSetTempMode(true);
       client.sendSetOcrWatch(ocrWatchEnabled);
     },
-    onSpeak: (msg: SpeakMessage) => {
-      // A chunk from the turn we already stopped, arriving late (see
+    onSpeak: (msg: SpeakMessage) => {      // A chunk from the turn we already stopped, arriving late (see
       // turnStopped's own comment above) -- drop it silently rather
       // than let it revive the stop button for a reply that's already
       // dismissed. Cleared the moment a real new turn starts.
@@ -873,6 +878,27 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
     setOcrWatchEnabled(!ocrWatchEnabled);
     // Same reasoning as Temp Chat's button above -- stays open for quick
     // reconsideration.
+  });
+
+  // "Use API model" -- the only toggle whose truth lives on the server (and in
+  // data/settings.json), because the router is what obeys it and a second
+  // window must agree. The click only *requests* a change; the badge is drawn
+  // from the server's reply, so it can never claim "On" while the backend has
+  // no key (it shows "No key" instead).
+  let apiModelEnabled = false;
+  function renderApiModel(settings: SettingsMessage): void {
+    apiModelEnabled = settings.use_api_model;
+    qaApiModelState.textContent = settings.use_api_model
+      ? (settings.cloud_available ? "On" : "No key")
+      : "Off";
+    qaApiModelState.classList.toggle("on", settings.use_api_model && settings.cloud_available);
+    qaApiModelState.classList.toggle("warn", settings.use_api_model && !settings.cloud_available);
+    // Keep the tray check item in step (no-op outside Tauri).
+    invoke("sync_cloud_toggle", { enabled: settings.use_api_model }).catch(() => {});
+  }
+  qaApiModelButton.addEventListener("click", () => {
+    client.sendSetApiModel(!apiModelEnabled);
+    // Stays open, same as the other stateful toggles.
   });
 
   qaLogButton.addEventListener("click", () => {
@@ -1071,6 +1097,15 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
     }
   }).catch((err) => {
     console.error("[yuri] couldn't attach F9 push-to-talk listener", err);
+  });
+
+  // Tray menu's "Use API model" check item. Rust just reports the new check
+  // state; the request goes over the same WS as the menu toggle, and the badge
+  // is updated from the server's reply like everything else here.
+  listen<boolean>("yuri://use-api-model", (event) => {
+    client.sendSetApiModel(Boolean(event.payload));
+  }).catch((err) => {
+    console.error("[yuri] couldn't attach tray API-model listener", err);
   });
 
   return {

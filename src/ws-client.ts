@@ -125,6 +125,19 @@ export type RequestCameraFrameMessage = {
   type: "request_camera_frame";
 };
 
+/** Server-owned setting, echoed on connect and after every change. The
+ * frontend never keeps this as its own preference: the router is the source of
+ * truth, and a second window must see the same value. `cloud_available` false
+ * means the toggle is on but there is no key/catalog, so the backend is still
+ * local -- the UI says "No key" rather than lying. */
+export type SettingsMessage = {
+  type: "settings";
+  use_api_model: boolean;
+  cloud_available: boolean;
+  effective: boolean;
+  mode: string;
+};
+
 export type ConnectionState = "offline" | "connected" | "listening";
 
 interface WsClientOptions {
@@ -145,6 +158,9 @@ interface WsClientOptions {
    * that never sends get_log/clear_log (there isn't one today besides
    * main.ts's log panel) doesn't need to handle it. */
   onLog?: (msg: LogMessage) => void;
+  /** Fired on connect and whenever the API-model switch changes (the tray and
+   * the quick-action menu both drive the same server state). */
+  onSettings?: (msg: SettingsMessage) => void;
   /** Optional since it's new -- a caller that doesn't care about
    * driver/observer status (there isn't one today, but keeping this
    * optional rather than required avoids forcing every future caller to
@@ -194,7 +210,8 @@ export class WsClient {
         | TurnEndMessage
         | SurfaceStatusMessage
         | LogMessage
-        | RequestCameraFrameMessage;
+        | RequestCameraFrameMessage
+        | SettingsMessage;
       try {
         parsed = JSON.parse(event.data);
       } catch {
@@ -214,6 +231,8 @@ export class WsClient {
         this.opts.onLog?.(parsed);
       } else if (parsed.type === "request_camera_frame") {
         this.opts.onRequestCameraFrame?.();
+      } else if (parsed.type === "settings") {
+        this.opts.onSettings?.(parsed);
       }
     });
 
@@ -331,6 +350,17 @@ export class WsClient {
   sendSetOcrWatch(enabled: boolean): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(JSON.stringify({ type: "set_ocr_watch", enabled }));
+  }
+
+  /** Quick-action menu's / tray's "Use API model" switch. Unlike the other
+   * toggles this one is server state with a persisted value, so it is NOT
+   * fire-and-forget in spirit: the orchestrator replies with a `settings`
+   * message (see onSettings) carrying the effective value and whether cloud is
+   * actually available. The caller updates the UI from that reply rather than
+   * assuming the click took effect. */
+  sendSetApiModel(enabled: boolean): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify({ type: "set_api_model", enabled }));
   }
 
   /** Answers a request_camera_frame (see onRequestCameraFrame in

@@ -66,7 +66,7 @@ the avatar still breathes, blinks and glances, because those are procedural.
 ## Tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 472
+.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 486
 npm run test:fe                                        # 49
 npx tsc --noEmit
 npm run build
@@ -122,7 +122,21 @@ conditions (background job, explicit "think hard", or a large/multi-tool task).
 Pixels, audio, raw transcripts and memory writes are structurally local: the
 decision function refuses them before a provider is chosen.
 
-To actually let Mind call out, set in `config/config.yaml`:
+To actually let Mind call out, either flip the switch in the app or set it in
+`config/config.yaml`:
+
+**The switch.** Open the `+` menu and use **Use API Model**, or tick
+**Use API model (cloud)** in the tray menu. Both drive the same server state:
+
+- `Off` — cloud decisions are recorded but never executed (shadow).
+- `On` — `mind` may execute cloud decisions, still subject to privacy, trust and
+  budget rules.
+- `On` + `No key` — you asked for it but there is no resolvable
+  `AIROUTER_API_KEY` (or no catalog), so everything stays local. The menu says
+  so; it does not pretend.
+
+The choice persists in `data/settings.json` and applies immediately, no restart.
+The config default still exists for a fresh machine:
 
 ```yaml
 routing:
@@ -130,7 +144,8 @@ routing:
   enforce_roles: [mind]
 ```
 
-Until then the audit log (`logs/audit.jsonl`) records what it *would* have done.
+Either way the audit log (`logs/audit.jsonl`) records every decision, including
+the ones that stayed local.
 
 ## Docs
 

@@ -454,6 +454,13 @@ body {
   border-color: var(--accent-lavender);
 }
 
+/* API model switched on but cloud is unavailable (no key / no catalog): show
+   the intent without pretending it is working. */
+.quick-action-state.warn {
+  color: var(--accent-camera);
+  border-color: var(--accent-camera);
+}
+
 #qa-camera-state.on {
   color: var(--accent-camera);
   border-color: var(--accent-camera);

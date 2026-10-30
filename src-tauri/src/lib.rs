@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     tray::{TrayIcon, TrayIconBuilder},
     Emitter, Manager, PhysicalPosition, Position, WindowEvent,
 };
@@ -41,6 +41,24 @@ const CAMERA_ACTIVE_TRAY_ICON: &[u8] = include_bytes!("../icons/tray-camera-acti
 /// icon later -- `build_tray()`'s own `.build(app)?` call used to just
 /// discard this.
 struct TrayIconHandle(TrayIcon);
+
+/// The tray menu's "Use API model" check item, kept as state so the frontend
+/// can push the server's value back into it (`sync_cloud_toggle`). The item
+/// itself toggles natively on click; this only makes the check state match
+/// what the orchestrator actually accepted, including the "no key" case.
+struct CloudToggleItem(CheckMenuItem<tauri::Wry>);
+
+/// Frontend -> Rust: the orchestrator replied with the authoritative value for
+/// the API-model switch; put the tray check mark where it says. A failed call
+/// is silent on purpose -- a tray item out of step is cosmetic, and the next
+/// settings message (or restart) corrects it.
+#[tauri::command]
+fn sync_cloud_toggle(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    if let Some(item) = app.try_state::<CloudToggleItem>() {
+        item.0.set_checked(enabled).map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
 
 /// No visible console window for a spawned child process. Same numeric
 /// flag Windows' own CreateProcess API uses -- there's no named constant
@@ -157,7 +175,8 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             toggle_click_through,
-            set_camera_indicator
+            set_camera_indicator,
+            sync_cloud_toggle
         ])
         .setup(|app| {
             let window = app
@@ -580,9 +599,9 @@ fn spawn_logged(
     }
 }
 
-/// Tray icon + menu: Show/Hide, Toggle Click-through, Quit.
+/// Tray icon + menu: Show/Hide, Toggle Click-through, Use API model, Quit.
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
-    let show_hide = MenuItem::with_id(app, "show_hide", "Show/Hide Luna", true, None::<&str>)?;
+    let show_hide = MenuItem::with_id(app, "show_hide", "Show/Hide Yuri", true, None::<&str>)?;
     let click_through = MenuItem::with_id(
         app,
         "click_through",
@@ -590,8 +609,21 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
+    // Checkable: the OS flips the mark on click; the handler below only reports
+    // the new state and the frontend asks the orchestrator to accept it. The
+    // authoritative value comes back via `sync_cloud_toggle`, so a failed or
+    // refused change (no AIROUTER_API_KEY, orchestrator down) snaps back.
+    let use_api = CheckMenuItem::with_id(
+        app,
+        "use_api_model",
+        "Use API model (cloud)",
+        true,
+        false,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_hide, &click_through, &quit])?;
+    let menu = Menu::with_items(app, &[&show_hide, &click_through, &use_api, &quit])?;
+    app.manage(CloudToggleItem(use_api));
 
     // Interior mutability instead of a mutable capture: on_menu_event's
     // closure is `Fn`, not `FnMut` (it may be invoked from more than one
@@ -614,6 +646,16 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
                     let now_ignoring = !click_through_state.load(Ordering::Relaxed);
                     click_through_state.store(now_ignoring, Ordering::Relaxed);
                     let _ = window.set_ignore_cursor_events(now_ignoring);
+                }
+                "use_api_model" => {
+                    // Report only. Whether cloud is actually usable (a key, a
+                    // catalog, budget) is the orchestrator's call, so the real
+                    // state comes back through sync_cloud_toggle.
+                    let checked = app
+                        .try_state::<CloudToggleItem>()
+                        .map(|item| item.0.is_checked().unwrap_or(false))
+                        .unwrap_or(false);
+                    let _ = app.emit("yuri://use-api-model", checked);
                 }
                 "quit" => {
                     // Try a graceful shutdown first, falling back to a

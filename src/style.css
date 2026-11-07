@@ -19,15 +19,15 @@
   color-scheme: dark;
   --ink: #fff2f8;
   --dim: rgba(255, 242, 248, 0.62);
-  --glass: rgba(48, 20, 40, 0.55);
-  --glass-border: rgba(255, 205, 232, 0.16);
-  --accent-idle: #f6a9d0;
-  --accent-listening: #ff8fb3;
-  --accent-offline: #7c6672;
+  --glass: rgba(38, 17, 44, 0.60);
+  --glass-border: rgba(214, 190, 255, 0.20);
+  --accent-idle: #f7b0d8;
+  --accent-listening: #ff7fae;
+  --accent-offline: #75627a;
   /* New this phase -- secondary pastel accent, used to tell Luna's lines
      apart from the user's own in the log panel below (and available for
      anything else that wants a second color besides the pink family). */
-  --accent-lavender: #cba6f7;
+  --accent-lavender: #c2a6ff;
   /* Phase 5 -- camera-active red, matching the tray icon's own indicator
      dot (src-tauri/icons/tray-camera-active.png) so the in-menu "On"
      badge and the tray both read as the same "camera is live" signal
@@ -42,8 +42,11 @@
      --orb-listening -- see #status-orb's own rule below for why this
      replaced a much bigger gradient-and-pulse version that turned out
      to not match what was actually being asked for. */
-  --orb-idle: #7a5fd6;
-  --orb-listening: #d6588f;
+  --orb-idle: #8d72f2;
+  --orb-listening: #ff6aa2;
+  /* Offline is a hollow ring, so it reads as "nobody home" by shape and
+     not only by being dimmer. */
+  --orb-offline: #75627a;
 }
 
 * {
@@ -208,26 +211,50 @@ body {
    purpose elsewhere (log-panel message colors). */
 #status-orb {
   flex: none;
+  position: relative;
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--orb-idle);
-  box-shadow: 0 0 6px 1px var(--orb-idle);
-  opacity: 0.45;
+  /* Offline: a hollow ring. */
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--orb-offline);
   transition:
     background-color 200ms ease,
     box-shadow 200ms ease,
-    opacity 200ms ease;
+    transform 200ms ease;
 }
 
+/* Connected: a lit core with a soft halo ring around it. */
 #status-orb.connected {
-  opacity: 1;
+  background: radial-gradient(circle at 35% 30%, #d9ccff 0%, var(--orb-idle) 62%);
+  box-shadow:
+    0 0 0 2px rgba(141, 114, 242, 0.20),
+    0 0 8px 1px rgba(141, 114, 242, 0.55);
 }
 
+/* Listening: warmer, and the halo breathes slowly. */
 #status-orb.listening {
-  background: var(--orb-listening);
-  box-shadow: 0 0 7px 1.5px var(--orb-listening);
-  opacity: 1;
+  background: radial-gradient(circle at 35% 30%, #ffd0e2 0%, var(--orb-listening) 62%);
+  box-shadow:
+    0 0 0 2px rgba(255, 106, 162, 0.22),
+    0 0 9px 2px rgba(255, 106, 162, 0.6);
+  animation: orb-breathe 2.2s ease-in-out infinite;
+}
+
+@keyframes orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #status-orb.listening {
+    animation: none;
+  }
 }
 
 #input-box {

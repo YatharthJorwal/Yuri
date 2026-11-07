@@ -7,8 +7,8 @@ import io
 
 import pytest
 
-import vad
-import voice
+from audio import vad
+from audio import voice
 
 FRAME_SAMPLES = 320
 

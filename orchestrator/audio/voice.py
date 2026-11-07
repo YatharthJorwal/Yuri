@@ -14,7 +14,7 @@ from __future__ import annotations
 import io
 import wave
 
-import vad
+from audio import vad
 
 SAMPLE_RATE = 16000
 SAMPLE_WIDTH = 2

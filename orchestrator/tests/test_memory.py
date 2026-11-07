@@ -15,8 +15,11 @@ sandbox) and the LLM streaming call consolidation.py makes (same reason).
 Both are monkeypatched at the function-call boundary, same pattern
 previous phases used for llm.py/tts.py stub servers.
 
-Run with: python -m pytest memory/test_memory.py -v
-(from orchestrator/, with requirements.txt installed)
+Run with: python -m pytest tests/test_memory.py -v
+(from orchestrator/, with requirements-dev.txt installed)
+
+The writer pass, contradiction handling, decay and the importer have their own
+files (test_writer.py, test_contradiction.py, test_decay_profile.py, test_migrate.py).
 """
 
 from __future__ import annotations
@@ -25,7 +28,8 @@ import struct
 
 import pytest
 
-from . import consolidation, db, embeddings, recall, store, forget
+import llm
+from memory import db, embeddings, forget, recall, store
 
 
 def _fake_vector(seed: float, dim: int = 4) -> list[float]:
@@ -161,7 +165,8 @@ def test_dimension_match_is_silent(tmp_path, monkeypatch, capsys):
 
 @pytest.mark.asyncio
 async def test_recall_combines_facts_and_episodes(memory_db, monkeypatch):
-    store.add_fact("uses an RTX 3060")
+    fact_id = store.add_fact("uses an RTX 3060")
+    store.set_fact_vector(fact_id, _fake_vector(0.0))
     store.add_episode("debugged the STT CUDA DLL issue together", _fake_vector(0.0))
 
     async def fake_embed(text: str) -> list[float]:
@@ -186,16 +191,15 @@ async def test_recall_returns_none_when_empty(memory_db, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_recall_degrades_when_embedding_unreachable(memory_db, monkeypatch):
-    """Facts alone should still come back even if the embed() call fails --
-    this is the actual graceful-degradation behavior this module exists
-    for, not just a nice-to-have edge case."""
+    """With no embedder, facts still come back, matched by shared words
+    instead of vectors. Episodes are skipped."""
     store.add_fact("prefers concise answers")
 
     async def failing_embed(text: str) -> list[float]:
         raise embeddings.EmbeddingUnreachableError("Ollama not running")
 
     monkeypatch.setattr(recall, "embed", failing_embed)
-    block = await recall.build_recall_context("hello", top_k=3)
+    block = await recall.build_recall_context("keep your answers concise", top_k=3)
     assert block is not None
     assert "concise answers" in block
 
@@ -209,8 +213,8 @@ async def test_recall_degrades_when_db_unavailable(monkeypatch):
     def raise_unavailable(*_a, **_kw):
         raise db.MemoryUnavailableError("simulated: disk full")
 
-    monkeypatch.setattr(store, "get_all_facts", raise_unavailable)
-    monkeypatch.setattr(store, "search_episodes", raise_unavailable)
+    for name in ("get_profile_card", "search_facts", "get_fact_rows", "search_episodes_scored"):
+        monkeypatch.setattr(store, name, raise_unavailable)
 
     async def fake_embed(text: str) -> list[float]:
         return _fake_vector(0.0)
@@ -221,7 +225,7 @@ async def test_recall_degrades_when_db_unavailable(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# consolidation.py -- llm.stream_reply and embed() are stubbed
+# shared LLM stub used by the forget.py tests below
 # ---------------------------------------------------------------------------
 
 
@@ -230,149 +234,33 @@ def _stub_llm_module(monkeypatch, output_text: str):
         for ch in output_text:
             yield ch
 
-    monkeypatch.setattr(consolidation.llm, "stream_reply", fake_stream_reply)
-
-
-@pytest.mark.asyncio
-async def test_consolidation_parses_clean_json(memory_db, monkeypatch):
-    _stub_llm_module(
-        monkeypatch,
-        '{"facts": ["likes dark mode", "building a Tauri app"], '
-        '"episode_summary": "Helped debug a lipsync issue."}',
-    )
-
-    async def fake_embed(text: str) -> list[float]:
-        return _fake_vector(0.2)
-
-    monkeypatch.setattr(consolidation, "embed", fake_embed)
-
-    history = [
-        {"role": "system", "content": "persona"},
-        {"role": "user", "content": "why is the mouth not moving"},
-        {"role": "assistant", "content": "found it, fixed"},
-    ]
-    await consolidation.consolidate_session(history)
-
-    facts = store.get_all_facts()
-    assert "likes dark mode" in facts
-    assert "building a Tauri app" in facts
-    episodes = store.search_episodes(_fake_vector(0.2), top_k=1)
-    assert episodes == ["Helped debug a lipsync issue."]
-
-
-@pytest.mark.asyncio
-async def test_consolidation_parses_json_wrapped_in_prose(memory_db, monkeypatch):
-    """A small model padding its output with commentary/markdown fences
-    around the JSON -- the realistic failure mode this parser exists for,
-    per this module's own docstring."""
-    _stub_llm_module(
-        monkeypatch,
-        "Sure, here's the summary:\n```json\n"
-        '{"facts": ["mentioned a cat named Miso"], "episode_summary": "Chatted about pets."}'
-        "\n```\nHope that helps!",
-    )
-
-    async def fake_embed(text: str) -> list[float]:
-        return _fake_vector(0.3)
-
-    monkeypatch.setattr(consolidation, "embed", fake_embed)
-
-    history = [{"role": "system", "content": "persona"}, {"role": "user", "content": "I have a cat, Miso"}]
-    await consolidation.consolidate_session(history)
-
-    assert "mentioned a cat named Miso" in store.get_all_facts()
-
-
-@pytest.mark.asyncio
-async def test_consolidation_falls_back_on_unparseable_output(memory_db, monkeypatch, capsys):
-    _stub_llm_module(monkeypatch, "I don't think I can do that in JSON, sorry!")
-
-    async def fake_embed(text: str) -> list[float]:
-        return _fake_vector(0.4)
-
-    monkeypatch.setattr(consolidation, "embed", fake_embed)
-
-    history = [{"role": "system", "content": "persona"}, {"role": "user", "content": "hi"}]
-    await consolidation.consolidate_session(history)
-
-    # No facts extracted, but the raw text still got stored as a fallback
-    # episode summary rather than the whole session being silently lost.
-    assert store.get_all_facts() == []
-    episodes = store.search_episodes(_fake_vector(0.4), top_k=1)
-    assert episodes and "I don't think I can do that" in episodes[0]
-    assert "didn't parse as the expected" in capsys.readouterr().err
-
-
-@pytest.mark.asyncio
-async def test_consolidation_skips_empty_session(memory_db, monkeypatch):
-    """system-prompt-only history (nothing actually happened) shouldn't
-    even make the LLM call."""
-    called = False
-
-    async def fake_stream_reply(messages):
-        nonlocal called
-        called = True
-        return
-        yield  # pragma: no cover -- unreachable, keeps this an async generator
-
-    monkeypatch.setattr(consolidation.llm, "stream_reply", fake_stream_reply)
-    await consolidation.consolidate_session([{"role": "system", "content": "persona"}])
-    assert called is False
-    assert store.get_all_facts() == []
-
-
-@pytest.mark.asyncio
-async def test_consolidation_survives_llm_unreachable(memory_db, monkeypatch):
-    async def failing_stream_reply(messages):
-        raise consolidation.llm.LLMUnreachableError("no server")
-        yield  # pragma: no cover -- unreachable, keeps this an async generator
-
-    monkeypatch.setattr(consolidation.llm, "stream_reply", failing_stream_reply)
-    history = [{"role": "system", "content": "persona"}, {"role": "user", "content": "hi"}]
-    # Should not raise.
-    await consolidation.consolidate_session(history)
-    assert store.get_all_facts() == []
-
-
-@pytest.mark.asyncio
-async def test_consolidation_keeps_facts_when_embedding_fails(memory_db, monkeypatch):
-    """Facts should still get written even if the episode's embedding call
-    fails -- only the episode summary is lost, per this module's docstring."""
-    _stub_llm_module(
-        monkeypatch,
-        '{"facts": ["prefers terse commit messages"], "episode_summary": "Talked about git."}',
-    )
-
-    async def failing_embed(text: str) -> list[float]:
-        raise embeddings.EmbeddingUnreachableError("Ollama not running")
-
-    monkeypatch.setattr(consolidation, "embed", failing_embed)
-
-    history = [{"role": "system", "content": "persona"}, {"role": "user", "content": "hi"}]
-    await consolidation.consolidate_session(history)
-
-    assert "prefers terse commit messages" in store.get_all_facts()
+    monkeypatch.setattr(llm, "stream_reply", fake_stream_reply)
 
 
 # ---------------------------------------------------------------------------
-# store.py -- get_all_facts_with_ids / delete_facts (forget.py's building blocks)
+# store.py -- get_all_facts_with_ids / forget_facts (forget.py's building blocks)
 # ---------------------------------------------------------------------------
 
 
-def test_get_all_facts_with_ids_and_delete(memory_db):
+def test_get_all_facts_with_ids_and_forget(memory_db):
     store.add_fact("likes pizza")
     store.add_fact("likes ice cream")
     with_ids = store.get_all_facts_with_ids()
     assert [content for _id, content in with_ids] == ["likes ice cream", "likes pizza"]
 
     pizza_id = next(fact_id for fact_id, content in with_ids if content == "likes pizza")
-    store.delete_facts([pizza_id])
+    store.forget_facts([pizza_id])
     assert store.get_all_facts() == ["likes ice cream"]
+    # Forgotten, not deleted: the row survives and can be restored.
+    row = store.get_fact(pizza_id)
+    assert row is not None and row["superseded_by"] == -1
+    assert store.restore_fact(pizza_id) is True
+    assert "likes pizza" in store.get_all_facts()
 
 
-def test_delete_facts_empty_list_is_noop(memory_db):
+def test_forget_facts_empty_list_is_noop(memory_db):
     store.add_fact("likes pizza")
-    store.delete_facts([])
+    store.forget_facts([])
     assert store.get_all_facts() == ["likes pizza"]
 
 

@@ -19,13 +19,13 @@ needs tiers) and P5 (it needs affect to sound right).
 | Phase | Status | Plan | Size |
 | --- | --- | --- | --- |
 | 0 Bootstrap | **done** | this file | M |
-| 1 Foundation + router | **core landed** | [PHASE-1-ROUTER.md](PHASE-1-ROUTER.md) | L |
-| 2 Fast path (voice) | not started | [PHASE-2-FAST-PATH.md](PHASE-2-FAST-PATH.md) | L |
-| 3 Memory v2 | not started | [PHASE-3-MEMORY.md](PHASE-3-MEMORY.md) | M |
-| 4 Agent core | not started | [PHASE-4-AGENT-CORE.md](PHASE-4-AGENT-CORE.md) | L |
-| 5 Affect + avatar | not started | [PHASE-5-AFFECT.md](PHASE-5-AFFECT.md) | M |
-| 6 Proactivity | not started | [PHASE-6-PROACTIVITY.md](PHASE-6-PROACTIVITY.md) | M |
-| 7 Evals + docs | not started | [PHASE-7-EVALS.md](PHASE-7-EVALS.md) | S, continuous |
+| 1 Foundation + router | **core landed** | [PHASE-1-ROUTER.md](phases/PHASE-1-ROUTER.md) | L |
+| 2 Fast path (voice) | **built, gate unmeasured** | [PHASE-2-FAST-PATH.md](phases/PHASE-2-FAST-PATH.md) | L |
+| 3 Memory v2 | **landed** (gate: see below) | [PHASE-3-MEMORY.md](phases/PHASE-3-MEMORY.md) | M |
+| 4 Agent core | not started | [PHASE-4-AGENT-CORE.md](phases/PHASE-4-AGENT-CORE.md) | L |
+| 5 Affect + avatar | not started | [PHASE-5-AFFECT.md](phases/PHASE-5-AFFECT.md) | M |
+| 6 Proactivity | not started | [PHASE-6-PROACTIVITY.md](phases/PHASE-6-PROACTIVITY.md) | M |
+| 7 Evals + docs | not started | [PHASE-7-EVALS.md](phases/PHASE-7-EVALS.md) | S, continuous |
 
 Each phase plan is the contract for that phase: components, config, tests, gate,
 and the risks worth knowing before work starts. `PHASE-2-FAST-PATH.md` and the
@@ -76,7 +76,7 @@ differently from Luna here, it is a porting bug.
 ## Phase 1 — Foundation + router (L)
 
 **Goal:** every model call goes through one router, in shadow mode, with
-behavior unchanged. Full plan: [PHASE-1-ROUTER.md](PHASE-1-ROUTER.md).
+behavior unchanged. Full plan: [PHASE-1-ROUTER.md](phases/PHASE-1-ROUTER.md).
 
 Already landed in P0: `bus.py`, the config v2 loader with startup validation, and
 `speech.py`.
@@ -143,7 +143,7 @@ Non-goals: no cloud, no proactivity, no affect-driven voice style.
 
 ## Phase 3 — Memory v2 (M)
 
-Full plan: [PHASE-3-MEMORY.md](PHASE-3-MEMORY.md).
+Full plan: [PHASE-3-MEMORY.md](phases/PHASE-3-MEMORY.md).
 
 **Goal:** memory that survives a hard kill and corrects itself.
 
@@ -163,11 +163,17 @@ Gate:
 
 Non-goals: no cloud memory, no multi-store, no graph DB.
 
+**Landed.** Gate status: kill -9 (mid model call and mid transaction), the
+10/5/3/20 seeded scenario and the 300/1200 token caps are proven by
+`orchestrator/tests/test_memory_gate.py`. Not proven here: the 50-turn
+persona-consistency run, and how the real local model judges ambiguous
+contradictions (the tests use a stub that judges perfectly). See D-023 to D-026.
+
 ---
 
 ## Phase 4 — Agent core (L)
 
-Full plan: [PHASE-4-AGENT-CORE.md](PHASE-4-AGENT-CORE.md).
+Full plan: [PHASE-4-AGENT-CORE.md](phases/PHASE-4-AGENT-CORE.md).
 
 **Goal:** Mind runs jobs, tools are typed and tiered, confirmation cannot be
 bypassed.
@@ -193,7 +199,7 @@ Non-goals: no computer control, no mouse/keyboard, no third-party messaging.
 
 ## Phase 5 — Affect + avatar (M)
 
-Full plan: [PHASE-5-AFFECT.md](PHASE-5-AFFECT.md).
+Full plan: [PHASE-5-AFFECT.md](phases/PHASE-5-AFFECT.md).
 
 **Goal:** she looks alive and her mood is a state, not a random loop.
 
@@ -215,7 +221,7 @@ Non-goals: no animation pack expansion, no sandbox apartment, no new VRM assets.
 
 ## Phase 6 — Proactivity (M)
 
-Full plan: [PHASE-6-PROACTIVITY.md](PHASE-6-PROACTIVITY.md).
+Full plan: [PHASE-6-PROACTIVITY.md](phases/PHASE-6-PROACTIVITY.md).
 
 **Goal:** she can start something, and she knows when not to.
 
@@ -239,7 +245,7 @@ Non-goals: no social feeds, no other recipients, no calendar integration.
 
 ## Phase 7 — Evals and docs (S, continuous)
 
-Full plan: [PHASE-7-EVALS.md](PHASE-7-EVALS.md).
+Full plan: [PHASE-7-EVALS.md](phases/PHASE-7-EVALS.md).
 
 **Goal:** the suite that keeps the previous six phases honest.
 

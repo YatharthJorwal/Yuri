@@ -373,10 +373,35 @@ class MemoryConfig:
     recall_top_k: int = 5
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     writer: Mapping[str, Any] = field(
-        default_factory=lambda: {"on_session_end": True, "interval_s": 600, "max_tokens": 800}
+        default_factory=lambda: {
+            "on_session_end": True,
+            "interval_s": 600,
+            "max_tokens": 800,
+            "window_tokens": 2500,
+            "busy_retry_s": 30,
+        }
     )
     decay: Mapping[str, Any] = field(
-        default_factory=lambda: {"enabled": True, "half_life_days": 30}
+        default_factory=lambda: {
+            "enabled": True,
+            "half_life_days": 30,
+            "fact_half_life_days": 180,
+            "compress_below": 0.15,
+            "compress_batch": 10,
+            "drop_below": 0.05,
+            "drop_after_days": 90,
+        }
+    )
+    recall: Mapping[str, Any] = field(
+        default_factory=lambda: {
+            "reflex": {"tokens": 300, "facts": 3, "episodes": 2},
+            "mind": {"tokens": 1200, "facts": 8, "episodes": 5},
+            "fact_similarity_floor": 0.45,
+            "episode_similarity_floor": 0.30,
+        }
+    )
+    contradiction: Mapping[str, Any] = field(
+        default_factory=lambda: {"candidates": 5, "model_similarity_floor": 0.55}
     )
     profile_card: Mapping[str, Any] = field(default_factory=lambda: {"max_chars": 800})
 

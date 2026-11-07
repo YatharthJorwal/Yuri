@@ -5,7 +5,7 @@ import dataclasses
 import pytest
 
 import config
-import tts
+from audio import tts
 
 
 def with_launch(**overrides):

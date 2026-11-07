@@ -2,7 +2,7 @@
 
 import json
 
-import latency
+from audio import latency
 
 
 def test_marks_are_first_wins():

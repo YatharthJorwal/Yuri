@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-import speech
-from speech_stream import SpeechStream
+from audio import speech
+from audio.speech_stream import SpeechStream
 
 
 def make_stream(*, synth=None, send=None):

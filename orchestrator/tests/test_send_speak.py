@@ -3,7 +3,7 @@
 import pytest
 
 import app
-import speech
+from audio import speech
 
 
 class FakeWebSocket:

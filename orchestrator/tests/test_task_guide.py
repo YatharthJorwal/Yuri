@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-import task_guide
+from senses import task_guide
 
 
 @pytest.fixture(autouse=True)

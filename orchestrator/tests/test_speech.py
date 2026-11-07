@@ -11,7 +11,7 @@ import dataclasses
 import pytest
 
 import config
-import speech
+from audio import speech
 
 
 CFG = config.CONFIG.speech

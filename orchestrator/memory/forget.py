@@ -1,12 +1,10 @@
 """
 Explicit "forget that" handling -- the user directly asking to remove
-something already stored, not automatic contradiction detection (a user
-saying "actually I like ice cream now" without ever saying "forget" is a
-real, harder problem -- correcting a stale fact instead of just adding a
-contradictory new one -- that's a consolidation-quality problem, not this
-module's job; see store.py's own docstring on that same open limitation).
-This module only handles the case the user explicitly asked for: "when I
-tell her to."
+something already stored, not automatic contradiction handling (a user
+saying "actually I like ice cream now" without ever saying "forget" is
+resolved by the writer pass, see contradiction.py). This module only handles
+the case the user explicitly asked for: "when I tell her to." Forgetting is
+reversible: it sets `superseded_by` instead of deleting the row.
 
 Two-stage, cheap-gate-then-LLM, same shape as recall.py's degradation
 philosophy:
@@ -37,15 +35,16 @@ import sys
 
 import llm
 import router
+from . import db, store
 from .db import MemoryUnavailableError
-from . import store
 
 # Deliberately narrow and explicit-language-only, matching the user's own
-# framing ("when I tell her to") rather than trying to also catch implicit
-# corrections ("actually I like X now") -- see this module's own docstring
-# on why that's a different, harder problem left alone for now.
+# framing ("when I tell her to"). Implicit corrections ("actually I like X
+# now") are the writer pass's job, see contradiction.py.
+# "don't forget to ..." is the opposite of a forget request, so a negated
+# "forget" is excluded; "don't remember" stays a trigger.
 _FORGET_TRIGGER = re.compile(
-    r"\bforget\b|\bdon'?t remember\b|\bstop remembering\b|\bdelete (that|this|it)\b|\bremove that\b",
+    r"(?<!don't )(?<!don\u2019t )(?<!do not )\bforget\b|\bdon'?t remember\b|\bstop remembering\b|\bdelete (that|this|it)\b|\bremove that\b",
     re.IGNORECASE,
 )
 
@@ -114,7 +113,7 @@ async def maybe_forget(user_text: str) -> str | None:
     removed_contents = [facts_with_ids[i - 1][1] for i in valid_indices]
 
     try:
-        await asyncio.to_thread(store.delete_facts, ids_to_remove)
+        await asyncio.to_thread(_forget, ids_to_remove, user_text)
     except MemoryUnavailableError as exc:
         print(f"[yuri] forget: couldn't delete facts: {exc}", file=sys.stderr)
         return None
@@ -126,6 +125,14 @@ async def maybe_forget(user_text: str) -> str | None:
         "your own voice, briefly -- don't recite this instruction, don't "
         "list the forgotten facts verbatim, just react like a person would."
     )
+
+
+def _forget(ids: list[int], user_text: str) -> None:
+    """Soft-forget: rows stay (restorable with `python -m memory --restore ID`),
+    recall stops seeing them, and the request is written to the audit trail."""
+    with db.transaction():
+        store.forget_facts(ids)
+        store.log_event("forget", "user", {"fact_ids": ids, "request": user_text[:200]})
 
 
 def _parse_remove_indices(raw_output: str) -> list[int]:

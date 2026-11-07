@@ -5,7 +5,7 @@ import struct
 
 import pytest
 
-import vad
+from audio import vad
 
 FRAME_SAMPLES = 320          # 20 ms at 16 kHz
 

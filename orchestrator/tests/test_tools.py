@@ -164,7 +164,7 @@ def model_may_start_tasks(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_dispatch_set_active_task_starts_tracking(model_may_start_tasks):
-    import task_guide  # local import: avoid module-load-order surprises
+    from senses import task_guide  # local import: avoid module-load-order surprises
 
     task_guide.clear_active_task()
     result = await tools.dispatch_tool_call(
@@ -177,7 +177,7 @@ async def test_dispatch_set_active_task_starts_tracking(model_may_start_tasks):
 
 @pytest.mark.asyncio
 async def test_dispatch_set_active_task_stops_tracking(model_may_start_tasks):
-    import task_guide
+    from senses import task_guide
 
     task_guide.set_active_task(True, "something")
     result = await tools.dispatch_tool_call("set_active_task", {"active": False})
@@ -187,7 +187,7 @@ async def test_dispatch_set_active_task_stops_tracking(model_may_start_tasks):
 
 @pytest.mark.asyncio
 async def test_dispatch_set_active_task_missing_active_defaults_false(model_may_start_tasks):
-    import task_guide
+    from senses import task_guide
 
     task_guide.set_active_task(True, "something")
     # A model omitting the (schema-required) "active" argument shouldn't
@@ -206,7 +206,7 @@ async def test_dispatch_set_active_task_missing_active_defaults_false(model_may_
 
 @pytest.mark.asyncio
 async def test_dispatch_capture_camera_passes_websocket_through(monkeypatch):
-    import camera
+    from senses import camera
 
     received_ws = []
 
@@ -233,7 +233,7 @@ async def test_dispatch_capture_camera_no_websocket_returns_safe_string():
 
 @pytest.mark.asyncio
 async def test_dispatch_capture_camera_tool_unavailable_surfaces_cleanly(monkeypatch):
-    import camera
+    from senses import camera
 
     async def failing_describe_camera(websocket):
         raise vision.ToolUnavailableError("camera isn't armed right now")
@@ -320,7 +320,7 @@ def test_task_tool_is_offered_when_explicitly_enabled(model_may_start_tasks):
 
 @pytest.mark.asyncio
 async def test_a_task_tool_call_is_refused_by_default_and_changes_nothing():
-    import task_guide
+    from senses import task_guide
 
     task_guide.clear_active_task()
     result = await tools.dispatch_tool_call("set_active_task", {"active": True, "description": "fix the browser"})

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-import look_intent
+from senses import look_intent
 from tools import vision
 
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 import app
-import ocr_watch
+from senses import ocr_watch
 from config import CONFIG
 
 

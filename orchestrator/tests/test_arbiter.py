@@ -1,6 +1,6 @@
 """Arbiter state machine: who may speak, and what a barge-in means."""
 
-import arbiter
+from audio import arbiter
 
 
 def test_turn_flow():

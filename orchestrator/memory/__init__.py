@@ -1,32 +1,30 @@
 """
-Phase 3 -- persistent memory. SQLite (+ sqlite-vec for semantic recall),
-per docs/ARCHITECTURE.md's memory design:
+Persistent memory (Phase 3, v2). SQLite plus sqlite-vec for semantic recall.
 
-- `facts`   -- durable statements about the user (preferences, current
-              project, stack, games played). Small in number, always
-              loaded in full -- no semantic search needed for a handful
-              of rows.
-- `episodes` -- rolling **summaries** of past sessions (never raw
-              transcripts -- distill, don't transcribe), each with an
-              embedding so a new turn can semantically recall "that bug
-              we fixed last week" instead of only ever seeing the most
-              recent N.
+- `facts`    -- durable statements about the user, each with a source, a
+                confidence, an optional subject and a pinned flag. A fact that
+                was replaced or forgotten stays in the table (`superseded_by`).
+- `episodes` -- rolling summaries of past conversation (never raw transcripts),
+                each with an embedding and a salience that decays over time.
+- `profile_card` -- a short always-on summary derived from the live facts.
+- `events`   -- an append-only audit trail of every change and every recall.
+- `transcript_log` -- the durable per-turn buffer the writer reads from.
 
 Submodules:
-- `db.py`           -- connection + schema (loads the sqlite-vec extension).
-- `embeddings.py`   -- talks to Ollama's embedding endpoint.
-- `store.py`        -- CRUD + the actual vec0 nearest-neighbor query.
-- `recall.py`       -- turns a user message into a memory block for the
-                        system prompt (facts + top-K relevant episodes).
-- `forget.py`       -- explicit "forget that" handling: a user directly
-                        asking to remove something already stored, not
-                        automatic contradiction detection (see its own
-                        docstring for that distinction).
-- `consolidation.py` -- runs at session end: LLM distills the session's
-                        history into candidate facts + an episode summary.
+- `db.py`            connection, corruption quarantine, locked transactions.
+- `migrate.py`       schema v1 -> v2 and the opt-in Luna importer.
+- `store.py`         all reads and writes; nothing here deletes a fact.
+- `writer.py`        the writer pass: transcript -> facts + episode, atomically.
+- `consolidation.py` the distillation prompt and its forgiving parser.
+- `contradiction.py` add / duplicate / supersede decisions and their vetoes.
+- `recall.py`        budgeted, relevance-floored memory block for a turn.
+- `decay.py`         salience and confidence fade, drop-from-search, compression.
+- `profile.py`       the derived profile card.
+- `forget.py`        explicit "forget that" (soft: reversible).
+- `embeddings.py`    Ollama's embedding endpoint.
+- `settings.py`      memory config sections with defaults filled in.
+- `__main__.py`      `python -m memory` maintenance CLI.
 
-Every piece degrades gracefully if something's unreachable (Ollama down
-for embeddings, DB file locked, etc.) -- memory is a nice-to-have context
-booster, not something a turn should ever hang or crash on. See each
-submodule's own docstring for its specific failure handling.
+Every piece degrades instead of failing a turn when something is unreachable
+(embedder down, model down, DB locked). See each module's docstring.
 """

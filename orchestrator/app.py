@@ -15,7 +15,7 @@ websocket connection, gone when it disconnects. Phase 3 adds durable
 memory *alongside* that, not instead of it: each turn gets a fresh recall
 block (facts + semantically relevant past-episode summaries, see
 memory/recall.py) injected into that turn's LLM call only, and once the
-connection actually ends, memory/consolidation.py distills the whole
+connection actually ends, the memory writer pass distills the whole
 session into new facts + one episode summary for next time. No tool-calling
 yet either way -- that's Phase 4.
 
@@ -31,7 +31,7 @@ Graceful shutdown: `/shutdown` (see its own docstring below) exists
 because the Tauri side's tray-Quit handler used to just hard-kill this
 process (`TerminateProcess` on Windows, via Rust's `Child::kill()`) --
 which meant `ws_endpoint`'s `finally` block, and therefore Phase 3's
-`consolidate_session()`, never ran on ANY quit path (tray Quit, Ctrl+C,
+the session-end writer pass, never ran on ANY quit path (tray Quit, Ctrl+C,
 Task Manager). Every session's memory was silently lost. Found while
 answering the user's own "what's the right way to close this" question,
 not anticipated up front -- see docs/DECISIONS.md.
@@ -47,31 +47,32 @@ import sys
 import time
 import traceback
 from collections.abc import AsyncIterator
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-import camera
+from senses import camera
 import context_budget
-import arbiter
-import latency
+from audio import arbiter
+from audio import latency
 import llm
 import router
 import settings as runtime_settings
-import look_intent
-import ocr_watch
-import speech
-import speech_stream
-import stt
-import task_guide
+from senses import look_intent
+from senses import ocr_watch
+from audio import speech
+from audio import speech_stream
+from audio import stt
+from senses import task_guide
 import tools
-import tts
-import vad
-import voice
-from chunking import extract_ready_chunks, flush
+from audio import tts
+from audio import vad
+from audio import voice
+from audio.chunking import extract_ready_chunks, flush
 from config import CONFIG
-from memory import consolidation, forget, recall, store
+from memory import forget, recall, store, writer
 from memory.db import MemoryUnavailableError
 from persona import SYSTEM_PROMPT, apply_persona_pass, extract_emotion_tag
 from tools import vision
@@ -111,6 +112,14 @@ async def _startup_model_checks() -> None:
         print(f"[yuri] router startup skipped: {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
+async def _startup_memory_pass() -> None:
+    await asyncio.sleep(20)  # let the model checks and the first connection settle
+    try:
+        await writer.WRITER.run_pass("startup")
+    except Exception as exc:  # noqa: BLE001 -- memory work must never affect startup
+        print(f"[yuri] memory catch-up pass failed: {exc}", file=sys.stderr)
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """One diagnostic at boot: what Ollama says the configured chat/vision
@@ -118,7 +127,15 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     Runs as a background task so a slow or absent Ollama never delays
     startup; never raises."""
     asyncio.create_task(_startup_model_checks())
+    # Memory writer: never competes with a reply (it waits for the arbiter to be
+    # idle), and a catch-up pass shortly after boot picks up anything a crash or a
+    # forced exit left unprocessed -- the transcript buffer is durable.
+    writer.WRITER.configure(is_busy=lambda: ARBITER.state != arbiter.IDLE)
+    writer.WRITER.start()
+    startup_pass = asyncio.create_task(_startup_memory_pass())
     yield
+    startup_pass.cancel()
+    await writer.WRITER.stop(final_pass=True)
 
 
 app = FastAPI(lifespan=_lifespan)
@@ -158,7 +175,7 @@ _connection_surface: dict[WebSocket, str] = {}
 # never worth replaying. Deliberately module-level and *not* part of
 # `history` -- same reasoning as the memory blocks in _run_turn below: it
 # would otherwise go stale, repeat every turn, and get fed to
-# consolidation.py as though someone had said it out loud.
+# the memory writer as though someone had said it out loud.
 _scene_state: str | None = None
 
 # Sent (in character, same as LLM_UNREACHABLE_LINE/STT_UNREACHABLE_LINE
@@ -294,13 +311,13 @@ async def _send_speak(websocket: WebSocket, text: str) -> None:
     await _send_audio(websocket, prepared.display, await tts.synthesize(prepared.spoken))
 
 
-async def _log_transcript_turn_safely(user_text: str, assistant_text: str) -> None:
+async def _log_transcript_turn_safely(user_text: str, assistant_text: str, temp: bool = False) -> None:
     """Best-effort -- a DB hiccup here shouldn't take down the turn itself
     (turn_end still needs to reach the frontend either way), same
     degrade-gracefully pattern recall.py/forget.py already use for the
     same underlying DB."""
     try:
-        await asyncio.to_thread(store.add_transcript_turn, user_text, assistant_text)
+        await asyncio.to_thread(partial(store.add_transcript_turn, user_text, assistant_text, temp=temp))
     except MemoryUnavailableError as exc:
         print(f"[yuri] transcript log: write failed, skipping: {exc}", file=sys.stderr)
 
@@ -428,6 +445,7 @@ async def _run_turn(
         temp_turn_flags.append(temp_mode)
     timings = LATENCY.begin()
     ARBITER.on_turn_started()
+    writer.WRITER.preempt()  # a timer-driven memory pass must not hold the model during a reply
     # Phase 4 Round 2: any real user turn counts as "they're still here,"
     # regardless of whether it's about the tracked task at all -- resets
     # Task Guide Mode's idle clock (see task_guide.is_idle/_task_guide_loop
@@ -440,7 +458,7 @@ async def _run_turn(
     # into the LLM call only -- never written into `history` itself (see
     # memory/recall.py's docstring for why: history is the real
     # conversation, and this would otherwise go stale, double up every
-    # turn, and get fed back into consolidation.py as if it were something
+    # turn, and get fed back into the memory writer as if it were something
     # someone actually said). Falls back to plain `history` unchanged if
     # neither has anything to add -- a turn should never fail or even
     # look different structurally just because memory had nothing to do.
@@ -650,7 +668,7 @@ async def _run_turn(
         # just on normal completion) so the log panel matches reality even
         # for a stopped-mid-sentence turn, same reasoning as the
         # history.append() above.
-        await _log_transcript_turn_safely(user_text, " ".join(spoken_parts))
+        await _log_transcript_turn_safely(user_text, " ".join(spoken_parts), temp_mode)
 
     # Tells the frontend nothing more is coming for this turn (so it can
     # hide the stop button, re-enable input, etc.) -- only reached on a
@@ -709,7 +727,7 @@ async def _run_task_guide_check(
     temp_mode/temp_turn_flags: read live off the connection at call time
     (see _task_guide_loop's own comment on late-binding closures) so a
     chide that happens to land while Temp Chat is toggled on still gets
-    excluded from end-of-session consolidation, same as everything else
+    excluded from memory (the writer skips temp rows), same as everything else
     said during that window -- this does NOT suppress the chide itself,
     just how its history entry gets treated afterward. Task tracking
     itself already can't *start* during temp_mode (see _run_turn), so
@@ -782,7 +800,7 @@ async def _run_task_guide_check(
     # matching "user" turn precedes it -- nobody said anything -- which
     # is a legitimate shape for an unprompted comment, not a bug.
     _record_unprompted(history, " ".join(reply_parts), temp_mode, temp_turn_flags, unprompted)
-    await _log_transcript_turn_safely("", " ".join(apply_persona_pass(p) for p in reply_parts))
+    await _log_transcript_turn_safely("", " ".join(apply_persona_pass(p) for p in reply_parts), temp_mode)
     await websocket.send_json({"type": "turn_end", "emotion": detected_emotion})
 
 
@@ -818,7 +836,7 @@ async def _run_ocr_watch_check(
 
     temp_mode/temp_turn_flags: same treatment as _run_task_guide_check's
     own -- read live at call time so a comment landing while Temp Chat is
-    on still gets excluded from end-of-session consolidation, without
+    on still gets excluded from memory (the writer skips temp rows), without
     suppressing the comment itself.
 
     Always calls ocr_watch.mark_checked() (with the fresh summary, so the
@@ -894,7 +912,7 @@ async def _run_ocr_watch_check(
     # that's legitimate here too, not a bug.
     ocr_watch.mark_commented()
     _record_unprompted(history, " ".join(reply_parts), temp_mode, temp_turn_flags, unprompted)
-    await _log_transcript_turn_safely("", " ".join(apply_persona_pass(p) for p in reply_parts))
+    await _log_transcript_turn_safely("", " ".join(apply_persona_pass(p) for p in reply_parts), temp_mode)
     await websocket.send_json({"type": "turn_end", "emotion": detected_emotion})
 
 
@@ -908,7 +926,7 @@ async def shutdown_endpoint() -> dict:
     Sets `_shutdown_event`, which every open connection's main loop is
     already watching (see `ws_endpoint`) -- each one notices, breaks out
     of its receive loop, and runs its normal `finally` teardown (including
-    `consolidate_session()`) same as a real disconnect would. This handler
+    the session-end writer pass) same as a real disconnect would. This handler
     then waits a bounded amount of time for that to actually finish before
     exiting the process itself, so Rust's fallback `.kill()` only ever
     fires if this doesn't finish in time -- not as the normal path.
@@ -1471,7 +1489,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
                     await _driver.send_json({"type": "surface_status", "role": "driver"})
         # A turn still running when the connection itself goes away (not
         # just a "stop" click) -- cancel it too, same reasoning as
-        # above, so consolidation below reads a `history` that's finished
+        # above, so the session-end pass below sees a finished transcript
         # settling instead of one an abandoned task might still be
         # mutating mid-append.
         if current_turn_task is not None and not current_turn_task.done():
@@ -1500,29 +1518,17 @@ async def ws_endpoint(websocket: WebSocket) -> None:
             ocr_watch_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await ocr_watch_task
-        # Phase 3: distill this session into durable memory (facts +
-        # one episode summary) once it's actually over. In `finally`, not
-        # just the `except WebSocketDisconnect` branch, so it also runs on
-        # a clean/unexpected exit either way (including the shutdown-event
-        # `break` above). Wrapped defensively even though
-        # consolidate_session() already catches its own known failure
-        # modes internally (LLM/embedding unreachable) -- a session ending
-        # should never be blocked by memory work, and an unforeseen bug
-        # here shouldn't take down connection teardown.
-        #
-        # Temp Chat turns are filtered out first -- temp_turn_flags is
-        # kept in lockstep with history[1:] (one bool per history.append,
-        # see _run_turn's docstring), so this excludes exactly what was
-        # said while the toggle was on, not the whole session just
-        # because it was touched at some point. history[0] is always the
-        # system prompt, never flag-tracked, so it's kept unconditionally.
-        history_to_consolidate = [history[0]] + [
-            msg for msg, is_temp in zip(history[1:], temp_turn_flags) if not is_temp
-        ]
+        # Distill whatever this session added to the transcript buffer into
+        # durable memory. In `finally`, not just the `except WebSocketDisconnect`
+        # branch, so it also runs on a clean exit and on the shutdown-event
+        # `break` above. Temp Chat turns were logged with temp=True and the
+        # writer skips them, so a temporary chat leaves nothing behind. If the
+        # process is killed mid-pass nothing is lost: the checkpoint only moves
+        # when the pass commits, and the startup catch-up pass redoes it.
         try:
-            await consolidation.consolidate_session(history_to_consolidate)
-        except Exception as exc:  # noqa: BLE001 -- see comment above
-            print(f"[yuri] consolidation failed unexpectedly: {exc}", file=sys.stderr)
+            await writer.WRITER.run_pass("session_end")
+        except Exception as exc:  # noqa: BLE001 -- a session ending must never be blocked by memory work
+            print(f"[yuri] memory writer failed unexpectedly: {exc}", file=sys.stderr)
         # Only reachable for the shutdown-event break above -- a real
         # WebSocketDisconnect means the socket's already gone. Harmless
         # either way; already-closed is a no-op error we don't care about.

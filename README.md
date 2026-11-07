@@ -2,15 +2,20 @@
 
 Local-first, agent-first companion for a single Windows PC. Successor to Luna.
 
-**Status: Phase 0 complete, Phase 1 router landed, Phase 2 in progress (speech
-path).** The port and config v2 are green; every model call goes through the
+**Status: Phase 0 complete, Phase 1 router landed, Phase 2 voice path built (gate
+unmeasured), Phase 3 memory v2 landed.** The port and config v2 are green; every model call goes through the
 router (decision function, local + AI Router providers, spend caps, redaction,
 audit); and the voice path now normalizes every spoken line in code, pipelines
 TTS one clause ahead of the model, and writes a latency row per turn. Voice input
 streams 20 ms frames to an energy VAD, barge-in cancels the turn and tells the
 shell to stop playback, and one arbiter decides who may make sound.
 
-Verified in this environment: `534` pytest, `49` frontend tests, `tsc --noEmit`,
+Memory now corrects itself instead of piling up: a timer-and-session-end writer
+pass distills the durable transcript buffer, contradictions supersede (nothing is
+ever deleted, everything is restorable with `python -m memory`), recall is
+budgeted per consumer, and episodes and facts decay without disappearing.
+
+Verified in this environment: `630` pytest, `49` frontend tests, `tsc --noEmit`,
 `vite build`, `cargo check`, a live `/v1/models` fetch (341 models), a real cloud
 completion through the router (`mind` -> `deepseek-v4-flash`, 10/3 tokens,
 $0.000002, audit row and spend ledger written), and a real GPT-SoVITS synthesis
@@ -70,7 +75,7 @@ the avatar still breathes, blinks and glances, because those are procedural.
 ## Tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 534
+.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 630
 npm run test:fe                                        # 49
 npx tsc --noEmit
 npm run build
@@ -108,7 +113,7 @@ use fakes.
   a startup error, not a warning.
 - **`orchestrator/bus.py`**: typed events with a `trust` flag and a bounded
   replay log, in-process on purpose (D-011).
-- **`orchestrator/speech.py`**: deterministic speech-safe text. Em/en dashes,
+- **`orchestrator/audio/speech.py`**: deterministic speech-safe text. Em/en dashes,
   quotes, ellipses, markdown, emoji, URLs and code fences never reach TTS.
   53 tests, including a golden corpus and an idempotence invariant.
 - **Rebrand**: window title, product name, identifier, persona prompt, model
@@ -167,28 +172,33 @@ risks):
 
 | Phase | Plan |
 | --- | --- |
-| 1 — foundation + router | [docs/PHASE-1-ROUTER.md](docs/PHASE-1-ROUTER.md) |
-| 2 — fast path (streaming voice, barge-in) | [docs/PHASE-2-FAST-PATH.md](docs/PHASE-2-FAST-PATH.md) |
-| 3 — memory v2 | [docs/PHASE-3-MEMORY.md](docs/PHASE-3-MEMORY.md) |
-| 4 — agent core (tools, tiers, Mind jobs) | [docs/PHASE-4-AGENT-CORE.md](docs/PHASE-4-AGENT-CORE.md) |
-| 5 — affect + avatar life | [docs/PHASE-5-AFFECT.md](docs/PHASE-5-AFFECT.md) |
-| 6 — proactivity + owner ping | [docs/PHASE-6-PROACTIVITY.md](docs/PHASE-6-PROACTIVITY.md) |
-| 7 — evals + docs | [docs/PHASE-7-EVALS.md](docs/PHASE-7-EVALS.md) |
+| 1 — foundation + router | [docs/phases/PHASE-1-ROUTER.md](docs/phases/PHASE-1-ROUTER.md) |
+| 2 — fast path (streaming voice, barge-in) | [docs/phases/PHASE-2-FAST-PATH.md](docs/phases/PHASE-2-FAST-PATH.md) |
+| 3 — memory v2 | [docs/phases/PHASE-3-MEMORY.md](docs/phases/PHASE-3-MEMORY.md) |
+| 4 — agent core (tools, tiers, Mind jobs) | [docs/phases/PHASE-4-AGENT-CORE.md](docs/phases/PHASE-4-AGENT-CORE.md) |
+| 5 — affect + avatar life | [docs/phases/PHASE-5-AFFECT.md](docs/phases/PHASE-5-AFFECT.md) |
+| 6 — proactivity + owner ping | [docs/phases/PHASE-6-PROACTIVITY.md](docs/phases/PHASE-6-PROACTIVITY.md) |
+| 7 — evals + docs | [docs/phases/PHASE-7-EVALS.md](docs/phases/PHASE-7-EVALS.md) |
 
 ## Layout
 
 ```
 orchestrator/     Python: FastAPI/WebSocket server, agent loop, memory, tools
+  app.py          WebSocket server and turn loop
   config.py       config v2 + derived v1 views
   bus.py          typed event bus
-  speech.py       speech-safe text
   llm.py          Ollama/OpenAI-compatible streaming client
-  memory/         SQLite + sqlite-vec: facts, episodes, recall, consolidation
+  persona.py      system prompt
+  audio/          arbiter, VAD, STT, TTS, speech-safe text, latency rows
+  senses/         camera, look-intent, ambient OCR, Task Guide
+  router/         role-based model routing, budget, audit, redaction
+  memory/         schema v2 store, writer pass, contradiction, recall, decay, profile card
   tools/          screen, camera, clipboard, vision
+  tests/          every pytest file (run: python -m pytest orchestrator)
 src-tauri/        Rust core: window, tray, hotkeys, child-process Job Object
 src/              three.js + @pixiv/three-vrm, lipsync, mic, idle motion
 config/           config.example.yaml, secrets.example.yaml
-docs/             spec, scope, routing, phases, decisions
+docs/             spec, scope, routing, decisions, handoff; phases/ holds the per-phase plans
 public/vrm/       your avatar (gitignored)
 public/vrm-animations/  your clips (gitignored)
 ```

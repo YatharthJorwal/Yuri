@@ -336,14 +336,14 @@ they are to discover late.
 | `orchestrator/llm.py` | 648 | Split: `providers/ollama_native.py`, `providers/openai_compat.py`, `fold_system_messages`, context accounting. Gains the router in front. |
 | `orchestrator/persona.py` | 225 | Port. Persona file externed, speech rules added. |
 | `orchestrator/context_budget.py` | 144 | Port. Calibration ratio kept, it is real data. |
-| `orchestrator/task_guide.py` | 309 | Port, becomes one trigger-driven behavior (v0.1 §8). |
-| `orchestrator/ocr_watch.py` | 218 | Port, gated by the shared arbiter. |
-| `orchestrator/look_intent.py` | 194 | Port. This is the Python-decides pattern in practice. |
+| `orchestrator/senses/task_guide.py` | 309 | Port, becomes one trigger-driven behavior (v0.1 §8). |
+| `orchestrator/senses/ocr_watch.py` | 218 | Port, gated by the shared arbiter. |
+| `orchestrator/senses/look_intent.py` | 194 | Port. This is the Python-decides pattern in practice. |
 | `orchestrator/memory/*` | 688 | Port wholesale (store, db, consolidation, forget, recall, embeddings). |
 | `orchestrator/tools/*` | 310 | Port + tier metadata + audit fields. |
-| `orchestrator/camera.py`, `chunking.py` | 130 | Port; `chunking.py` extended for TTS clauses. |
-| `orchestrator/stt.py` | 133 | Rewrite: streaming/VAD-aware, same config surface. |
-| `orchestrator/tts.py` | 113 | Rewrite: streaming, abort, managed launcher, fallback kept. |
+| `orchestrator/senses/camera.py`, `chunking.py` | 130 | Port; `chunking.py` extended for TTS clauses. |
+| `orchestrator/audio/stt.py` | 133 | Rewrite: streaming/VAD-aware, same config surface. |
+| `orchestrator/audio/tts.py` | 113 | Rewrite: streaming, abort, managed launcher, fallback kept. |
 | `orchestrator/config.py` | 205 | Rewrite for schema v2, with defaults for every key. |
 | `orchestrator/test_*.py` | ~1900 | Port as the P0 baseline gate; extend per phase. |
 | `src-tauri/` | — | Copy nearly verbatim (Job Object, tray, hotkeys, windowing). |

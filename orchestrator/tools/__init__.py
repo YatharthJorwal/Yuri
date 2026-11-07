@@ -12,8 +12,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Awaitable, Callable
 
-import camera
-import task_guide
+from senses import camera
+from senses import task_guide
 from config import CONFIG
 from tools import vision
 

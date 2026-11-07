@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 
-import camera
+from senses import camera
 
 
 class _FakeWebSocket:

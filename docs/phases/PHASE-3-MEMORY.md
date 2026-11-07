@@ -205,3 +205,32 @@ Gate: `PHASES.md` P3 gate, plus every supersede/forget reversible from the DB.
    Mitigation: hard caps in code, measured per turn, asserted in tests.
 4. **Two writers.** Timer and session-end can overlap. Mitigation: one asyncio
    lock, checkpoint compare inside the transaction.
+
+---
+
+## 11. As landed
+
+Everything in sections 1 to 8 shipped. Where the code differs from the plan:
+
+- **Timestamps.** The v1 `created_at` text columns are kept (changing their type
+  would rewrite data); numeric `created_ts` / `last_seen_at` / `decayed_at` /
+  `last_used_at` columns were added beside them.
+- **Writer checkpoint** is `meta.writer_checkpoint_id` (a `transcript_log` row id),
+  not a timestamp: ids are monotonic even after "Clear log", timestamps tie.
+- **Temp Chat.** `transcript_log` gained `temp`. The writer skips those rows but
+  moves its checkpoint past them. (The old code logged temp turns unconditionally,
+  so reading the log without this flag would have broken Temp Chat.)
+- **`memory.writer.max_tokens`** caps the model's *reply*; the transcript read per
+  pass is capped by the new `memory.writer.window_tokens` (2500) and a backlog is
+  worked through in chunks.
+- **Constrained JSON** is not used: the local provider does not forward a schema
+  (see D-025). Parsing is forgiving, and every model answer is validated against
+  what the code showed it (a made-up fact id is ignored).
+- **Compression** merges the oldest ten low-salience episodes rather than clustering
+  them by topic.
+- **`consolidate_session()` is gone.** `consolidation.py` is now only the
+  distillation prompt and parser; `writer.py` does the rest.
+- **Files.** The tests landed as `test_migrate.py`, `test_contradiction.py`,
+  `test_writer.py`, `test_recall_budget.py`, `test_decay_profile.py`,
+  `test_forget_v2.py`, `test_memory_cli.py` and `test_memory_gate.py`.
+- **Maintenance CLI** (not in the plan): `python -m memory --facts|--events|--restore|--pin|--import-luna`.

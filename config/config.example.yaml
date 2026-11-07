@@ -279,13 +279,36 @@ latency:
 memory:
   db_path: 'data/memory.db'
   recall_top_k: 5
+  # The writer pass distills new transcript turns into facts + one episode summary.
+  # It runs on a timer and at session end, never while Yuri is speaking.
+  # max_tokens caps its reply; window_tokens caps how much transcript one pass reads.
   writer:
     on_session_end: true
     interval_s: 600
     max_tokens: 800
+    window_tokens: 2500
+    busy_retry_s: 30
+  # Recall is budgeted per consumer: the contents injected (profile card + facts +
+  # episodes) never exceed `tokens`. Facts below the similarity floor are not injected.
+  recall:
+    reflex: {tokens: 300, facts: 3, episodes: 2}
+    mind: {tokens: 1200, facts: 8, episodes: 5}
+    fact_similarity_floor: 0.45
+    episode_similarity_floor: 0.30
+  # How a new fact is compared with stored ones. The model is only asked when a
+  # neighbour is at least this similar and the deterministic checks were silent.
+  contradiction:
+    candidates: 5
+    model_similarity_floor: 0.55
+  # Nothing is deleted by decay: episodes fall out of search, facts lose confidence.
   decay:
     enabled: true
-    half_life_days: 30
+    half_life_days: 30        # episode salience
+    fact_half_life_days: 180  # fact confidence (floor 0.1, pinned never decays)
+    compress_below: 0.15
+    compress_batch: 10
+    drop_below: 0.05
+    drop_after_days: 90
   profile_card:
     max_chars: 800
 

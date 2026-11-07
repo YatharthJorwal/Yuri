@@ -17,8 +17,8 @@ import asyncio
 import sys
 from typing import Awaitable, Callable
 
-import speech
-from tts import synthesize as default_synthesize
+from audio import speech
+from audio.tts import synthesize as default_synthesize
 
 Send = Callable[[str, bytes], Awaitable[None]]
 Synth = Callable[[str], Awaitable[bytes]]

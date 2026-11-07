@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-import ocr_watch
+from senses import ocr_watch
 
 
 @pytest.fixture(autouse=True)

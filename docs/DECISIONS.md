@@ -418,6 +418,90 @@ available if the 1/20 gate fails on the real desk.
 
 ---
 
+## D-023 — The transcript log is the writer's durable buffer, and Temp Chat is a column
+
+**Decision.** The writer pass reads `transcript_log` rows after
+`meta.writer_checkpoint_id`, distills them, and applies facts, episode and the new
+checkpoint in one transaction (`db.transaction()`, serialised by a process-wide
+lock). Temp Chat turns are logged with `temp = 1`: still visible in the log panel,
+never read by the writer, and the checkpoint moves past them.
+
+**Why.** The log already survives a crash, so no second buffer is needed, and the
+single transaction makes a pass all-or-nothing (a SIGKILL test proves it, in the
+model call and inside the transaction). The temp flag is required, not optional:
+the log was written for every turn regardless of Temp Chat, so a writer that read
+it unfiltered would have memorised temporary chats.
+
+**Rejected.** A separate scratch table (duplicates data that is already durable);
+filtering temp turns from in-memory history as the old session-end code did (that
+history is gone after a crash, which is the case this phase exists for).
+
+**Cost.** "Clear log" also discards turns the writer had not processed yet. That
+matches the intent of the button, but it is now a way to lose pending memory.
+
+---
+
+## D-024 — Replace and forget never delete
+
+**Decision.** `superseded_by` is NULL (live), the id of the replacing fact, `-1`
+(forgotten by the user) or `-2` (episode decayed out of search). Vectors are
+removed so search cannot see a retired row; the row stays and
+`python -m memory --restore ID` brings it back. A supersede is vetoed (and logged
+as `supersede_blocked`) when the target is pinned, or has higher confidence than
+the new fact, unless the new fact is flagged as an explicit correction.
+
+**Why.** An automatic "that contradicts" decision made by a small model will
+sometimes be wrong; the damage has to be one command to undo. Provenance
+(`source`, `confidence`) is what lets the code tell a correction from an offhand
+remark.
+
+**Rejected.** Hard delete (unrecoverable mistakes); trusting the model's `target_id`
+blindly (it must be one of the ids it was shown).
+
+**Cost.** The database only grows. Decay removes things from search, never from disk.
+
+---
+
+## D-025 — Recall is relevance-gated, which changes what the old tests assumed
+
+**Decision.** Recall injects a profile card plus up to 3 facts and 2 episodes
+(reflex) or 8 and 5 (mind), only above a similarity floor, hard-capped at 300 /
+1200 tokens of content. Previously up to 30 facts were injected on every turn
+regardless of relevance. With no embedder, facts match by shared words and
+episodes are skipped. Two old tests asserted the always-inject behaviour and were
+rewritten.
+
+**Known gap found while building this.** The Ollama-native provider
+(`router/providers/ollama_native.py`) calls `llm.stream_reply(messages)` with
+neither the role's model nor `schema` / `max_tokens`. So `memory_writer`
+(configured as `qwen3.5:4b`) actually runs on the main chat model, and there is
+no constrained-JSON output. Fixing it means passing `model` and `format` through
+`llm.py`, which cannot be verified without a live Ollama, so it was not changed.
+Until then: expect writer passes to compete with chat for the 9B, which is why
+timer passes wait for an idle arbiter and are cancelled when a turn starts.
+
+**Cost.** A fact that is true but not semantically near the current message is not
+injected; the profile card is the always-on channel for that.
+
+---
+
+## D-026 — Repository layout
+
+**Decision.** `orchestrator/` modules are grouped by job: `audio/` (voice I/O),
+`senses/` (camera, look, OCR, Task Guide), alongside the existing `router/`,
+`memory/`, `tools/`. All pytest files live in `orchestrator/tests/`; per-phase
+plans live in `docs/phases/`; the handoff note is `docs/HANDOFF.md`.
+
+**Why.** Twenty-odd flat modules with tests interleaved made it hard to see what
+belonged to what. Imports became `from audio import tts`; the module objects are
+unchanged, so tests that patch `llm.<fn>` or `tts.<fn>` by attribute still work
+(the rule in `HANDOFF.md`).
+
+**Cost.** Any local branch or open diff from before this change will conflict on
+paths. `git mv` was used so history follows the files.
+
+---
+
 ## Superseded / historical
 
 - **D-002 (first version).** "Groq is the cloud provider" was drafted before the

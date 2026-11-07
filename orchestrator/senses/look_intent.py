@@ -38,7 +38,7 @@ import re
 import sys
 import time
 
-import camera
+from senses import camera
 import llm
 from tools import vision
 

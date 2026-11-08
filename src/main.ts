@@ -377,7 +377,9 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
 
   const setState = (state: ConnectionState) => {
     statusOrb.classList.remove("connected", "listening");
-    statusOrb.title = state;
+    const label = state === "offline" ? "connecting…" : state;
+    statusOrb.title = label;
+    statusOrb.setAttribute("aria-label", label);
     if (state !== "offline") statusOrb.classList.add(state);
   };
 
@@ -484,7 +486,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
       assistantLine.className = "log-turn-assistant";
       const assistantName = document.createElement("span");
       assistantName.className = "log-turn-name";
-      assistantName.textContent = "Luna:";
+      assistantName.textContent = "Yuri:";
       assistantLine.append(assistantName, document.createTextNode(turn.assistant));
       row.appendChild(assistantLine);
 
@@ -547,6 +549,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
 
   function setTurnActive(active: boolean): void {
     turnActive = active;
+    statusOrb.classList.toggle("busy", active);
     input.disabled = active || observerLocked;
     updateInputButtons();
   }
@@ -806,7 +809,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
       observerLocked = role === "observer";
       input.disabled = observerLocked || turnActive;
       updateInputButtons();
-      if (observerLocked) flashPlaceholder("Luna's active in the sandbox right now…");
+      if (observerLocked) flashPlaceholder("Yuri's active in the sandbox right now…");
     },
     // Phase 5 -- camera.py (orchestrator) asking this connection for a
     // frame. Referenced here before its own `const camera` declaration
@@ -929,7 +932,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
     // rather than a destructive-file-delete pattern: low stakes (it's a
     // convenience view of things already said out loud, not the only
     // copy of anything), and a confirm() popup would be an odd, very
-    // un-Luna interruption for a one-button UI this small.
+    // un-Yuri interruption for a one-button UI this small.
     client.sendClearLog();
   });
 
@@ -984,7 +987,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
     }
   });
 
-  // Dev/QA toggle: click through every VRM expression Luna actually
+  // Dev/QA toggle: click through every VRM expression Yuri actually
   // supports, one per click, entirely independent of anything the
   // orchestrator says -- lets you confirm the model's expression
   // blendshapes are wired up correctly without needing to provoke each
@@ -1100,7 +1103,7 @@ function setupHud(setTargetEmotion: (emotion?: string) => void): Hud {
     input.focus();
   }
 
-  // F9 push-to-talk, works even when Luna's window isn't focused -- the
+  // F9 push-to-talk, works even when Yuri's window isn't focused -- the
   // actual global shortcut registration lives in src-tauri/src/lib.rs
   // (Rust), which just emits this event; all the recording logic stays
   // here in one place, same start()/stop() the mic button itself uses.

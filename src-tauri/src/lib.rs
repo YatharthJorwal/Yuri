@@ -66,7 +66,7 @@ fn sync_cloud_toggle(app: tauri::AppHandle, enabled: bool) -> Result<(), String>
 /// per the Win32 docs).
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-/// Handles to every child process Luna spawned itself (GPT-SoVITS, the
+/// Handles to every child process Yuri spawned itself (GPT-SoVITS, the
 /// orchestrator), stored as Tauri-managed state so the tray menu's "quit"
 /// handler can shut them down before actually exiting -- spawning them
 /// hidden and then never cleaning them up would leave them running
@@ -153,14 +153,14 @@ fn install_kill_on_close_job() {
         Ok(job) => {
             eprintln!(
                 "[yuri] kill-on-close job object ACTIVE -- Windows will kill \
-                 GPT-SoVITS and the orchestrator if Luna dies for any reason \
+                 GPT-SoVITS and the orchestrator if Yuri dies for any reason \
                  (End Task, Ctrl+C, crash, tray Quit)."
             );
             std::mem::forget(job);
         }
         Err(e) => eprintln!(
             "[yuri] WARNING: couldn't set up the kill-on-close job object ({e}); \
-             children may be orphaned if Luna is closed via End Task or Ctrl+C \
+             children may be orphaned if Yuri is closed via End Task or Ctrl+C \
              instead of tray Quit."
         ),
     }
@@ -194,7 +194,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Luna is meant to live in the tray, not get closed by accident.
+            // Yuri is meant to live in the tray, not get closed by accident.
             // The only real "quit" is the tray menu's Quit item.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -202,7 +202,7 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running Luna");
+        .expect("error while running Yuri");
 }
 
 /// Places the window in the bottom-right corner of the primary monitor on
@@ -226,7 +226,7 @@ fn anchor_bottom_right(window: &tauri::WebviewWindow) {
 /// F9 push-to-talk: registered as an OS-level global shortcut, so it works
 /// regardless of which window has focus (a game, a browser, whatever) --
 /// unlike a plain keydown listener in the frontend, which only fires while
-/// Luna's own window is focused, defeating the point of an always-on-top
+/// Yuri's own window is focused, defeating the point of an always-on-top
 /// desktop companion you talk to while doing something else. Emits a
 /// "hotkey-talk" event with "pressed"/"released" as the payload; the
 /// frontend (src/mic.ts, wired up in src/main.ts) does the actual recording
@@ -262,7 +262,7 @@ fn register_push_to_talk_hotkey(app: &tauri::App) -> Result<(), Box<dyn std::err
 
 /// Reads src-tauri/launcher.local.txt (gitignored -- see
 /// launcher.local.txt.example next to it) for machine-specific paths this
-/// repo can't hardcode, the same reason start-luna.bat itself stayed
+/// repo can't hardcode, the same reason launcher .bat itself stayed
 /// gitignored -- one "KEY=value" per line, "#" comments and blank lines
 /// ignored. Returns an empty map, not an error, if the file doesn't exist
 /// yet -- GPT-SoVITS auto-start is just skipped in that case (tts.py's
@@ -285,10 +285,10 @@ fn read_launcher_config() -> HashMap<String, String> {
     map
 }
 
-/// Spawns GPT-SoVITS's API server and Luna's own orchestrator as hidden
+/// Spawns GPT-SoVITS's API server and Yuri's own orchestrator as hidden
 /// background processes -- `npm run tauri dev` (or the packaged .exe
 /// later) becomes the one thing you run, replacing the old
-/// start-luna.bat's three separate visible terminal windows. Output goes
+/// launcher .bat's three separate visible terminal windows. Output goes
 /// to logs/*.log instead of a console, since a hidden process obviously
 /// can't show one -- open those files if something's not responding, same
 /// information the old terminals gave you, just not in a popup window.
@@ -348,19 +348,67 @@ fn spawn_backend_processes(children: Arc<Mutex<Vec<(String, Child)>>>) {
         );
     }
 
-    // The orchestrator waits for GPT-SoVITS's port to actually be
-    // listening before starting -- same problem the old .bat file's blind
-    // `timeout /t 8` was working around, except this polls for the real
-    // signal instead of guessing a fixed delay, and still gives up after a
-    // bounded wait rather than blocking forever if GPT-SoVITS never comes
-    // up (tts.py's own per-turn pyttsx3 fallback covers that case, so
-    // starting the orchestrator anyway afterward is still the right call,
-    // not a hard failure). Runs on its own thread so it doesn't hold up
-    // window creation -- the frontend's own WebSocket reconnect loop
-    // already covers "the orchestrator isn't up yet," so there's nothing
-    // else here that needs to wait on it either.
+    // The orchestrator starts immediately, in parallel with GPT-SoVITS. It used
+    // to wait here (up to 60 s) for GPT-SoVITS's port, which meant the window
+    // sat on "connecting" for as long as GPT-SoVITS took to load its models even
+    // though chat and the UI do not need it. Voice does: tts.py is told (via
+    // YURI_SHELL_STARTS_TTS) that this shell owns that server, so it waits for it
+    // instead of launching a second copy, and gives the first spoken lines a few
+    // seconds of grace before falling back to the placeholder voice. Runs on its
+    // own thread so it never holds up window creation; the frontend's WebSocket
+    // reconnect loop covers the short time before the orchestrator is listening.
     let orchestrator_children = children;
     std::thread::spawn(move || {
+        // The virtualenv lives at the repo root (.venv), not inside
+        // orchestrator/ -- one environment for the whole repo.
+        let python = PathBuf::from("../.venv/Scripts/python.exe");
+        if !python.exists() {
+            eprintln!(
+                "[yuri] {} not found -- the Python venv is not set up yet. \
+                 Run `python -m venv .venv` and `pip install -r \
+                 orchestrator/requirements-dev.txt` from the repo root \
+                 first (see README).",
+                python.display()
+            );
+            return;
+        }
+
+        // True only if GPT-SoVITS really started (spawn_logged records a child only on
+        // success). If its spawn failed, tts.py must be free to try launching it itself.
+        let shell_starts_tts = orchestrator_children
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|entry| entry.0 == "GPT-SoVITS");
+
+        let mut cmd = Command::new(&python);
+        cmd.arg("app.py")
+            .current_dir("../orchestrator")
+            // Same reasoning as GPT-SoVITS's spawn above -- app.py's own
+            // print() calls (including ones with flush=True already, but
+            // no reason to depend on every call site remembering that)
+            // need this to reliably show up in orchestrator.log in real
+            // time rather than whenever Python's internal buffer happens
+            // to fill.
+            .env("PYTHONUNBUFFERED", "1");
+        if shell_starts_tts {
+            // Tells tts.py that this shell owns GPT-SoVITS: never launch a second
+            // copy, wait for ours (it is still loading models, in parallel).
+            cmd.env("YURI_SHELL_STARTS_TTS", "1");
+        }
+        spawn_logged(
+            "orchestrator",
+            &mut cmd,
+            &logs_dir.join("orchestrator.log"),
+            &orchestrator_children,
+        );
+
+        // From here on this is diagnostics only. GPT-SoVITS is not needed for
+        // the orchestrator to start, but if something else is squatting its
+        // port the user should be told why their voice sounds wrong.
+        if !shell_starts_tts {
+            return;
+        }
         wait_for_port(9880, Duration::from_secs(60));
 
         // Something answered on 9880 -- but is it actually the GPT-SoVITS
@@ -394,49 +442,18 @@ fn spawn_backend_processes(children: Arc<Mutex<Vec<(String, Child)>>>) {
                  which may be fine or may be broken/outdated -- not \
                  predictable either way. Fix: run `netstat -ano | findstr \
                  :9880` in PowerShell, find the PID in the last column, \
-                 `taskkill /PID <pid> /F` it, then relaunch Luna for a \
+                 `taskkill /PID <pid> /F` it, then relaunch Yuri for a \
                  clean start. See README.md's troubleshooting section for \
                  the same steps."
             );
         }
-
-        // Yuri keeps its virtualenv at the repo root (.venv), not inside
-        // orchestrator/ like Luna did -- one environment for the whole repo.
-        let python = PathBuf::from("../.venv/Scripts/python.exe");
-        if !python.exists() {
-            eprintln!(
-                "[yuri] {} not found -- the Python venv is not set up yet. \
-                 Run `python -m venv .venv` and `pip install -r \
-                 orchestrator/requirements-dev.txt` from the repo root \
-                 first (see README).",
-                python.display()
-            );
-            return;
-        }
-
-        let mut cmd = Command::new(&python);
-        cmd.arg("app.py")
-            .current_dir("../orchestrator")
-            // Same reasoning as GPT-SoVITS's spawn above -- app.py's own
-            // print() calls (including ones with flush=True already, but
-            // no reason to depend on every call site remembering that)
-            // need this to reliably show up in orchestrator.log in real
-            // time rather than whenever Python's internal buffer happens
-            // to fill.
-            .env("PYTHONUNBUFFERED", "1");
-        spawn_logged(
-            "orchestrator",
-            &mut cmd,
-            &logs_dir.join("orchestrator.log"),
-            &orchestrator_children,
-        );
     });
 }
 
 /// True only for Python interpreters -- the one kind of process the startup
-/// sweep below is willing to kill. Luna's own children (GPT-SoVITS's embedded
+/// sweep below is willing to kill. Yuri's own children (GPT-SoVITS's embedded
 /// python.exe, the orchestrator's venv python.exe) are all Python, so this
-/// is enough to clean up Luna's own orphans without ever touching, say, a
+/// is enough to clean up Yuri's own orphans without ever touching, say, a
 /// browser or a game that happens to be sitting on the same port.
 fn is_python_process(pid: u32) -> bool {
     let out = Command::new("tasklist")
@@ -454,7 +471,7 @@ fn is_python_process(pid: u32) -> bool {
 
 /// **UNVERIFIED -- no Rust toolchain in the sandbox this was written in.**
 /// Startup sweep: before spawning anything, kill any stale Python process
-/// still LISTENING on `port` from a previous Luna run. This is the safety
+/// still LISTENING on `port` from a previous Yuri run. This is the safety
 /// net behind the Job Object (install_kill_on_close_job): the Job Object
 /// stops *new* orphans, but this also clears ones left by older builds, by
 /// a Job Object that failed to install, or by anything else -- so a stale

@@ -322,7 +322,8 @@ they are to discover late.
 - Work Mode / computer control. Tier 2 confirmed actions only, in P4.
 - Third-party messaging. The owner ping is one channel to one recipient.
 - Luna's sandbox apartment (`sandbox.ts`, `src/apartment/`, `camera-modes.ts`,
-  `postfx.ts` stay frozen and unported unless asked for).
+  `postfx.ts`). Not ported. The two stray copies that had landed in `src/` were
+  deleted in D-028 (still in git history at `6ae2e3a`).
 - Fine-tuning the voice. Zero-shot from the existing reference clip, then decide.
 - Multi-user anything. One machine, one person.
 

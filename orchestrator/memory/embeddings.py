@@ -12,7 +12,7 @@ before writing this (same standard docs/DECISIONS.md already held the
 
 `input` takes either a single string or a list (for batching); this
 module always sends a one-element list and reads back `embeddings[0]`,
-since Luna only ever embeds one piece of text at a time (a user message,
+since Yuri only ever embeds one piece of text at a time (a user message,
 or one episode summary at consolidation time) -- no batching need yet.
 
 Model: `nomic-embed-text` (768-dim, Apache-2.0, ~274MB) is the default in

@@ -76,7 +76,6 @@ class Router:
         self._started = False
         self._lock = asyncio.Lock()
 
-        local_cfg = config.providers.get("local_ollama")
         cloud_cfg = config.providers.get("airouter")
         self.local_provider = local_provider or OllamaNativeProvider()
         self.cloud_provider = cloud_provider
@@ -500,7 +499,6 @@ def summarize(router: Router | None = None) -> str:
         f"month ${month:.4f}/{r.config.budget.monthly_usd}"
     )
     for name, role in r.config.roles.items():
-        model = decide_mod.model_for("local_ollama", name, r.config.models)
         print_chain = " -> ".join(
             decide_mod.model_for(provider, name, r.config.models) if provider == "local_ollama"
             else f"{provider}:{decide_mod.model_for(provider, name, r.config.models)}"

@@ -79,7 +79,11 @@
 // oversight; see docs/DECISIONS.md.
 
 const ORCHESTRATOR_URL = "ws://127.0.0.1:8765/ws";
-const RECONNECT_DELAY_MS = 2000;
+// Reconnect backs off 250 ms -> 500 -> 1000 -> 2000 (then stays at 2 s) and resets once
+// connected. A flat 2 s meant the window noticed a freshly started orchestrator up to
+// 2 s late; most of a cold start is spent in the first few retries.
+const RECONNECT_BASE_MS = 250;
+const RECONNECT_MAX_MS = 2000;
 
 export type SpeakMessage = {
   type: "speak";
@@ -206,6 +210,7 @@ export class WsClient {
   private socket: WebSocket | null = null;
   private opts: WsClientOptions;
   private reconnectTimer: number | undefined;
+  private reconnectAttempts = 0;
 
   constructor(opts: WsClientOptions) {
     this.opts = opts;
@@ -216,6 +221,7 @@ export class WsClient {
     this.socket = new WebSocket(url);
 
     this.socket.addEventListener("open", () => {
+      this.reconnectAttempts = 0;
       this.opts.onStateChange("connected");
       this.opts.onOpen?.();
     });
@@ -309,7 +315,7 @@ export class WsClient {
   }
 
   /**
-   * Push ambient context about where Luna is and what's around her.
+   * Push ambient context about where Yuri is and what's around her.
    *
    * Deliberately fire-and-forget and deliberately *not* a turn: it never
    * changes connection state, never prompts a reply, and is silently
@@ -417,6 +423,8 @@ export class WsClient {
 
   private scheduleReconnect(): void {
     window.clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = window.setTimeout(() => this.connect(), RECONNECT_DELAY_MS);
+    const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** this.reconnectAttempts);
+    this.reconnectAttempts += 1;
+    this.reconnectTimer = window.setTimeout(() => this.connect(), delay);
   }
 }

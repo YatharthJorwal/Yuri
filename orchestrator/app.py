@@ -1,5 +1,5 @@
 """
-Luna's orchestrator -- Phase 2.
+Yuri's orchestrator.
 
 Real LLM conversation now: user text is appended to a per-connection
 session history (system prompt from persona.py + prior turns), sent to the
@@ -83,11 +83,13 @@ LATENCY = latency.LatencyRecorder()
 # all ask this before making sound (PHASE-2-FAST-PATH.md §4).
 ARBITER = arbiter.Arbiter()
 
-async def _startup_model_checks() -> None:
-    """Capability report first (cheap, answers fast), then the warm-up load,
-    then the TTS server and the router's catalog/spend state. Never raises."""
+async def _check_chat_model() -> None:
+    # Capability report first (cheap, answers fast), then the warm-up load.
     await llm.report_model_capabilities()
     await llm.warm_up_model()
+
+
+async def _check_tts() -> None:
     try:
         up = await tts.ensure_server()
         print(
@@ -96,6 +98,9 @@ async def _startup_model_checks() -> None:
         )
     except Exception as exc:  # noqa: BLE001 -- voice diagnostics must not stop startup
         print(f"[yuri] tts startup check skipped: {type(exc).__name__}: {exc}", file=sys.stderr)
+
+
+async def _check_router() -> None:
     try:
         rt = router.get_router()
         cloud = await rt.startup()
@@ -110,6 +115,20 @@ async def _startup_model_checks() -> None:
         )
     except Exception as exc:  # noqa: BLE001 -- diagnostics must never stop startup
         print(f"[yuri] router startup skipped: {type(exc).__name__}: {exc}", file=sys.stderr)
+
+
+async def _startup_model_checks() -> None:
+    """Everything that can be slow at boot, run side by side instead of one after
+    another: the chat model's load into VRAM, the speech model, the TTS server and
+    the router's catalog are independent, so none of them should wait for a
+    multi-GB model load. Each one logs its own result and never raises."""
+    await asyncio.gather(
+        _check_chat_model(),
+        stt.warm_up(),
+        _check_tts(),
+        _check_router(),
+        return_exceptions=True,
+    )
 
 
 async def _startup_memory_pass() -> None:
@@ -168,7 +187,7 @@ _active_connections: set[WebSocket] = set()
 _driver: WebSocket | None = None
 _connection_surface: dict[WebSocket, str] = {}
 
-# Latest ambient description of where Luna is in the apartment, pushed by
+# Latest ambient description of where Yuri is in the apartment, pushed by
 # the sandbox's scene-state channel (see sandbox.ts's pushSceneState and
 # ws-client.ts's sendSceneState). Held as a single latest-wins string rather
 # than a queue: this is standing context, not events, so an older one is

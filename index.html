@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Yuri</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -40,7 +41,12 @@
           <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
         </svg>
       </button>
-      <div id="status-orb" title="disconnected"></div>
+      <div id="status-orb" role="status" title="connecting…" aria-label="connecting">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle class="orb-track" cx="12" cy="12" r="9" />
+          <circle class="orb-arc" cx="12" cy="12" r="9" pathLength="100" />
+        </svg>
+      </div>
       <input
         id="input-box"
         type="text"

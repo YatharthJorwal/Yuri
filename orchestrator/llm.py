@@ -418,7 +418,7 @@ def capability_warnings(
         )
     if chat_caps is not None and "tools" not in chat_caps:
         out.append(
-            f"'{chat_model}' reports no 'tools' capability. Chat still works (Luna retries "
+            f"'{chat_model}' reports no 'tools' capability. Chat still works (Yuri retries "
             "without tools) and look/camera requests are handled by the regex gate, but the "
             "model can't call tools on its own."
         )

@@ -20,7 +20,7 @@ philosophy:
 
 Returns a short instruction fragment (not literal text to speak) for
 app.py to fold into the same ephemeral system message recall.py's block
-goes into -- so the *main* Luna model (already carrying full persona
+goes into -- so the *main* Yuri model (already carrying full persona
 context) is the one that actually acknowledges the removal in character,
 rather than this module's own small classification call also trying to
 write in-character flavor text it has no persona context for.

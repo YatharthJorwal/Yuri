@@ -15,7 +15,7 @@ pass distills the durable transcript buffer, contradictions supersede (nothing i
 ever deleted, everything is restorable with `python -m memory`), recall is
 budgeted per consumer, and episodes and facts decay without disappearing.
 
-Verified in this environment: `630` pytest, `49` frontend tests, `tsc --noEmit`,
+Verified in this environment: `641` pytest, `49` frontend tests, `tsc --noEmit`,
 `vite build`, `cargo check`, a live `/v1/models` fetch (341 models), a real cloud
 completion through the router (`mind` -> `deepseek-v4-flash`, 10/3 tokens,
 $0.000002, audit row and spend ledger written), and a real GPT-SoVITS synthesis
@@ -75,7 +75,7 @@ the avatar still breathes, blinks and glances, because those are procedural.
 ## Tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 630
+.\.venv\Scripts\python.exe -m pytest orchestrator -q   # 641
 npm run test:fe                                        # 49
 npx tsc --noEmit
 npm run build

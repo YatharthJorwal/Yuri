@@ -19,7 +19,7 @@ HEAD: see `git log` (Phase 3 + layout change are one or two commits on top of `2
   need a real model (50-turn persona run, ambiguous-contradiction quality) are
   unmeasured.
 - **Phases 4-7**: scoped in `docs/phases/PHASE-*.md`, not started.
-- Tests: **630 pytest**, **49 frontend**, `tsc --noEmit`, `vite build`,
+- Tests: **641 pytest**, **49 frontend**, `tsc --noEmit`, `vite build`,
   `cargo check` all green.
 - `data/settings.json` does not exist yet: the API-model switch has never been
   flipped, so routing follows the config default (`shadow`).
@@ -78,6 +78,12 @@ HEAD: see `git log` (Phase 3 + layout change are one or two commits on top of `2
 - **Tests stub `llm.<fn>` by module attribute** and the router calls through the
   module, which is why the ported suite stayed green through the wiring. Do not
   change that to `from llm import x`.
+- **Boot is parallel (D-027).** The shell starts GPT-SoVITS and the orchestrator
+  together and sets `YURI_SHELL_STARTS_TTS=1`; `tts.py` then never launches a
+  server. If you run the orchestrator by hand (no shell), leave that variable unset
+  and `tts.ensure_server()` launches GPT-SoVITS itself as before.
+- **Disk:** `npm run clean` (dist, caches) and `npm run clean:all` (also the Rust
+  `target/`) are safe; they never touch `.venv`, `data/` or `logs/`.
 - **Memory never deletes.** Forget and supersede set `superseded_by`; use
   `python -m memory --facts --all` to see everything and `--restore ID` to undo.
   Temp Chat turns are logged with `temp=1` and the writer skips them; anything
@@ -116,7 +122,7 @@ HEAD: see `git log` (Phase 3 + layout change are one or two commits on top of `2
 
 ```powershell
 cd D:\AI\Yuri
-.\.venv\Scripts\python.exe -m pytest orchestrator -q      # 630
+.\.venv\Scripts\python.exe -m pytest orchestrator -q      # 641
 npm run test:fe                                            # 49
 npm run build                                              # tsc + vite
 cargo check --manifest-path src-tauri\Cargo.toml

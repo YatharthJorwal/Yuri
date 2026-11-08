@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import io
 import sys
+import threading
 import time
 
 from faster_whisper import WhisperModel
@@ -26,6 +27,7 @@ from faster_whisper import WhisperModel
 from config import CONFIG
 
 _model: WhisperModel | None = None
+_model_lock = threading.Lock()
 
 # Ceiling on how long a single transcription attempt (including a
 # first-ever model load, which downloads from Hugging Face) is allowed to
@@ -56,29 +58,48 @@ class STTError(Exception):
 def _get_model() -> WhisperModel:
     global _model
     if _model is None:
-        cfg = CONFIG.stt
-        # Prints unconditionally (not just on error) so a slow first load
-        # is visible in the log as it's happening, not just inferred after
-        # the fact from a timeout. If this line never appears despite
-        # actually recording something, the problem is upstream of stt.py
-        # entirely (audio never reached the backend) -- see app.py's own
-        # "received N bytes" log line right before this gets called.
-        print(
-            f"[yuri] loading faster-whisper model '{cfg.model_size}' on "
-            f"{cfg.device} ({cfg.compute_type}) -- first mic use this run "
-            "only. Downloads from Hugging Face on a genuinely first-ever "
-            "run, which can take a while depending on your connection.",
-            file=sys.stderr,
-            flush=True,
-        )
-        start = time.monotonic()
-        _model = WhisperModel(cfg.model_size, device=cfg.device, compute_type=cfg.compute_type)
-        print(
-            f"[yuri] faster-whisper model loaded in {time.monotonic() - start:.1f}s",
-            file=sys.stderr,
-            flush=True,
-        )
-    return _model
+        with _model_lock:
+            if _model is None:  # re-check: the startup warm-up and a first turn can race
+                _load_model()
+    return _model  # type: ignore[return-value]
+
+
+def _load_model() -> None:
+    global _model
+    cfg = CONFIG.stt
+    # Prints unconditionally (not just on error) so a slow first load
+    # is visible in the log as it's happening, not just inferred after
+    # the fact from a timeout. If this line never appears despite
+    # actually recording something, the problem is upstream of stt.py
+    # entirely (audio never reached the backend) -- see app.py's own
+    # "received N bytes" log line right before this gets called.
+    print(
+        f"[yuri] loading faster-whisper model '{cfg.model_size}' on "
+        f"{cfg.device} ({cfg.compute_type}) -- once per run. Downloads "
+        "from Hugging Face on a genuinely first-ever run, which can take "
+        "a while depending on your connection.",
+        file=sys.stderr,
+        flush=True,
+    )
+    start = time.monotonic()
+    _model = WhisperModel(cfg.model_size, device=cfg.device, compute_type=cfg.compute_type)
+    print(
+        f"[yuri] faster-whisper model loaded in {time.monotonic() - start:.1f}s",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+async def warm_up() -> None:
+    """Loads the speech model in the background at startup so the first spoken
+    turn is not also a model load. Best-effort: never raises (the first real
+    transcription simply loads it, as before)."""
+    if not CONFIG.stt.warm_up_on_start or _model is not None:
+        return
+    try:
+        await asyncio.to_thread(_get_model)
+    except Exception as exc:  # noqa: BLE001 -- a failed warm-up must not affect startup
+        print(f"[yuri] stt warm-up failed (will retry on first use): {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
 def _transcribe_sync(audio_bytes: bytes) -> str:

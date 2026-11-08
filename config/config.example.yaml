@@ -9,7 +9,7 @@
 #
 # WINDOWS PATHS: wrap any path containing backslashes in SINGLE quotes, e.g.
 #   'C:\Users\you\file.wav'
-# Double quotes treat \U \n \t as escapes and will fail to parse (Luna hit this).
+# Double quotes treat \U \n \t as escapes and will fail to parse.
 
 version: 2
 
@@ -188,6 +188,7 @@ voice:
     compute_type: 'int8'
     language: 'en'
     timeout_s: 20
+    warm_up_on_start: true      # load the speech model at boot so the first voice turn is fast
 
   vad:
     engine: 'silero_onnx'       # fallback chain: webrtcvad, then energy gate
@@ -274,7 +275,7 @@ latency:
     inter_clause_gap: 300
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Memory. SQLite + sqlite-vec, one file, 768-dim (Luna's store, extended).
+# Memory. SQLite + sqlite-vec, one file, 768-dim.
 # ─────────────────────────────────────────────────────────────────────────────
 memory:
   db_path: 'data/memory.db'
@@ -314,13 +315,13 @@ memory:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Task Guide: while a task is tracked, glance at the screen on this interval
-# and steer back if the user drifts. Ported from Luna, unchanged.
+# and steer back if the user drifts. 
 # ─────────────────────────────────────────────────────────────────────────────
 task_guide:
   capture_interval_seconds: 90
   idle_timeout_seconds: 1800
   # The classifier owns task start/stop; the model calling the tool itself
-  # once started a phantom task from a bare "hi" (Luna's log). Leave false.
+  # once started a phantom task from a bare "hi" (seen in real logs). Leave false.
   model_can_start_tasks: false
 
 # ─────────────────────────────────────────────────────────────────────────────

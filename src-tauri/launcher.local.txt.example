@@ -1,6 +1,6 @@
 # Machine-specific paths for src-tauri/src/lib.rs's spawn_backend_processes()
 # to auto-start GPT-SoVITS alongside the orchestrator when Yuri's app itself
-# launches -- replaces the old start-luna.bat's separate terminal windows.
+# launches -- replaces the old launcher .bat's separate terminal windows.
 # (Phase 2 moves this launch into the Python supervisor; the path stays here.)
 #
 # Copy this file to "launcher.local.txt" (same folder, gitignored -- it'll

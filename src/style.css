@@ -2,9 +2,8 @@
    is the visual centerpiece. Everything here exists to get out of the
    character's way: fully transparent background, one small glass pill
    for input, no chrome, no web fonts (keeps this light while a game is
-   running). The status dot doubles as a mood indicator later (its color
-   will track Luna's emotion tag from the persona layer) rather than being a
-   generic connection light.
+   running). The status spinner shows connection and activity (connecting,
+   connected, listening, working) rather than being a decorative dot.
 
    Phase 9 reskin: pastel pink/lavender palette, replacing the original
    cooler violet-on-near-black one -- same structure/layout throughout
@@ -24,7 +23,7 @@
   --accent-idle: #f7b0d8;
   --accent-listening: #ff7fae;
   --accent-offline: #75627a;
-  /* New this phase -- secondary pastel accent, used to tell Luna's lines
+  /* New this phase -- secondary pastel accent, used to tell Yuri's lines
      apart from the user's own in the log panel below (and available for
      anything else that wants a second color besides the pink family). */
   --accent-lavender: #c2a6ff;
@@ -33,19 +32,11 @@
      badge and the tray both read as the same "camera is live" signal
      rather than looking like two unrelated states. */
   --accent-camera: #ea5a5a;
-  /* Phase 9.1 (orb fix) -- sampled directly from the user's own reference
-     screenshots (a small dot in a pill-shaped bar, two states) rather
-     than reusing --accent-idle/--accent-lavender, since those are
-     already used elsewhere (log-panel message colors) and shifting
-     their values would cascade to UI this reference wasn't about.
-     #status-orb.connected uses --orb-idle, #status-orb.listening uses
-     --orb-listening -- see #status-orb's own rule below for why this
-     replaced a much bigger gradient-and-pulse version that turned out
-     to not match what was actually being asked for. */
+  /* Status spinner colours. Flat on purpose: a ring and an arc, no gradients.
+     connecting = dim, spinning; connected = lavender ring; listening = pink
+     ring with a ripple; working = lavender arc spinning fast. */
   --orb-idle: #8d72f2;
   --orb-listening: #ff6aa2;
-  /* Offline is a hollow ring, so it reads as "nobody home" by shape and
-     not only by being dimmer. */
   --orb-offline: #75627a;
 }
 
@@ -69,7 +60,7 @@ body {
 #stage-container {
   position: absolute;
   inset: 0;
-  /* Lets the window be dragged by clicking Luna's body, without needing a
+  /* Lets the window be dragged by clicking Yuri's body, without needing a
      titlebar. See src-tauri capabilities / window setup. */
   -webkit-app-region: drag;
 }
@@ -202,57 +193,114 @@ body {
     box-shadow 200ms ease;
 }
 
-/* Small flat-color dot with a soft glow -- matches the user's own
-   reference screenshots (a small dot next to placeholder text in a
-   pill), not the earlier placeholder guess this replaced (a much bigger
-   gradient orb with a scaling pulse). Colors sampled directly from those
-   references (see --orb-idle/--orb-listening above) rather than reused
-   from the existing pink/lavender accents, which serve a different UI
-   purpose elsewhere (log-panel message colors). */
+/* Status spinner (replaces the old dot). One SVG: a faint track plus an arc.
+   - default (backend not reachable yet): dim arc spinning slowly, so the
+     window reads as "starting up" instead of "broken";
+   - .connected: the arc closes into a calm lavender ring;
+   - .listening: pink ring with a soft ripple;
+   - .busy (a turn is in flight): arc spins fast. Combines with the above. */
 #status-orb {
   flex: none;
   position: relative;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  /* Offline: a hollow ring. */
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--orb-offline);
-  transition:
-    background-color 200ms ease,
-    box-shadow 200ms ease,
-    transform 200ms ease;
+  width: 18px;
+  height: 18px;
+  color: var(--orb-offline);
+  transition: color 250ms ease;
 }
 
-/* Connected: a lit core with a soft halo ring around it. */
+#status-orb svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  animation: orb-spin 1.6s linear infinite;
+}
+
+#status-orb circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+}
+
+#status-orb .orb-track {
+  opacity: 0.2;
+}
+
+#status-orb .orb-arc {
+  stroke-linecap: round;
+  stroke-dasharray: 26 74;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dasharray 400ms ease;
+}
+
 #status-orb.connected {
-  background: radial-gradient(circle at 35% 30%, #d9ccff 0%, var(--orb-idle) 62%);
-  box-shadow:
-    0 0 0 2px rgba(141, 114, 242, 0.20),
-    0 0 8px 1px rgba(141, 114, 242, 0.55);
+  color: var(--orb-idle);
 }
 
-/* Listening: warmer, and the halo breathes slowly. */
 #status-orb.listening {
-  background: radial-gradient(circle at 35% 30%, #ffd0e2 0%, var(--orb-listening) 62%);
-  box-shadow:
-    0 0 0 2px rgba(255, 106, 162, 0.22),
-    0 0 9px 2px rgba(255, 106, 162, 0.6);
-  animation: orb-breathe 2.2s ease-in-out infinite;
+  color: var(--orb-listening);
 }
 
-@keyframes orb-breathe {
-  0%,
-  100% {
-    transform: scale(1);
+#status-orb.connected svg,
+#status-orb.listening svg {
+  animation: none;
+}
+
+#status-orb.connected .orb-arc,
+#status-orb.listening .orb-arc {
+  stroke-dasharray: 100 0;
+}
+
+#status-orb.listening::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0;
+  animation: orb-ripple 1.8s ease-out infinite;
+}
+
+#status-orb.busy {
+  color: var(--accent-lavender);
+}
+
+#status-orb.busy svg {
+  animation: orb-spin 0.9s linear infinite;
+}
+
+#status-orb.busy .orb-arc {
+  stroke-dasharray: 30 70;
+}
+
+#status-orb.busy::after {
+  animation: none;
+  opacity: 0;
+}
+
+@keyframes orb-spin {
+  to {
+    transform: rotate(360deg);
   }
-  50% {
-    transform: scale(1.18);
+}
+
+@keyframes orb-ripple {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #status-orb.listening {
+  #status-orb svg,
+  #status-orb.busy svg {
+    animation: none;
+  }
+  #status-orb.listening::after {
     animation: none;
   }
 }
@@ -693,7 +741,7 @@ body {
   text-align: center;
 }
 
-/* One turn = one user line + one Luna line, grouped together rather than
+/* One turn = one user line + one Yuri line, grouped together rather than
    interleaved into one flat list, so a glance at the panel reads as
    "exchange, exchange, exchange" instead of a wall of alternating text
    with no visual grouping. */

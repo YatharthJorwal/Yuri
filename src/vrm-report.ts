@@ -1,5 +1,5 @@
 // One-time capability report for the loaded VRM, printed to the devtools
-// console at boot (and kept on `window.__lunaVrmReport` so it can be copied
+// console at boot (and kept on `window.__yuriVrmReport` so it can be copied
 // after the fact). It changes nothing about how she looks or moves.
 //
 // Why it exists: the "living avatar" phase (docs/ROADMAP.md, Phase 13) wants
@@ -94,7 +94,7 @@ export function logVrmReport(vrm: VRM): void {
   try {
     const report = buildVrmReport(vrm);
     console.log(report.text);
-    (window as unknown as { __lunaVrmReport?: VrmReport }).__lunaVrmReport = report;
+    (window as unknown as { __yuriVrmReport?: VrmReport }).__yuriVrmReport = report;
   } catch (err) {
     console.warn("[yuri] VRM report failed (harmless):", err);
   }

@@ -165,7 +165,7 @@ def after_a_screen_look(monkeypatch):
         "take a look",
         "have a look",
         "can you look?",
-        "hey luna, look",
+        "hey yuri, look",
     ],
 )
 def test_trailing_look_targets_the_screen(text):

@@ -71,7 +71,7 @@ def capture_screen(max_long_edge: int | None = None) -> str:
     is Windows/macOS-native (no extra system dependency beyond Pillow
     itself on those two platforms -- Linux needs an X11/Wayland grab
     tool underneath, irrelevant here since this project targets
-    Windows), but this has never been run against Luna's real
+    Windows), but this has never been run against Yuri's real
     screen/multi-monitor setup. Flagged the same as every other
     "logically checked, not confirmed" item in this project. This
     sandbox has no display at all, so even the happy path below is

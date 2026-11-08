@@ -28,6 +28,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 from urllib.parse import urlparse
 
 import httpx
@@ -116,6 +117,14 @@ async def synthesize(text: str) -> bytes:
     tts.engine selects. Runs pyttsx3's blocking engine in a thread so it
     doesn't stall the websocket event loop."""
     if CONFIG.tts.engine == "gpt_sovits":
+        if (
+            _shell_manages_server()
+            and time.monotonic() - _PROCESS_STARTED < _STARTUP_GRACE_WINDOW_S
+            and not await health()
+        ):
+            # The shell's GPT-SoVITS is still loading. Give the first lines a few
+            # seconds rather than speaking them in the placeholder voice.
+            await _wait_for_health(_STARTUP_GRACE_PER_LINE_S, interval=0.25)
         try:
             return await _synthesize_gpt_sovits(text)
         except TTSUnreachableError as exc:
@@ -136,6 +145,22 @@ async def synthesize(text: str) -> bytes:
 # orchestrator standalone should still get a voice, and a launch that lost a race
 # must not start a second server on the same port. Port-first means "already
 # running" is always the answer that wins.
+#
+# Shell-managed mode: the Tauri shell starts GPT-SoVITS and this process at the
+# same time (GPT-SoVITS takes tens of seconds to load models; nothing else should
+# wait for it) and sets YURI_SHELL_STARTS_TTS=1. In that mode this module never
+# launches a server, because a port that is closed *right now* just means the
+# shell's copy is still loading, and a second launch would fight it for the port
+# and the GPU. It waits for the shell's server instead.
+
+SHELL_MANAGED_ENV = "YURI_SHELL_STARTS_TTS"
+_STARTUP_GRACE_WINDOW_S = 90.0  # only this long after process start...
+_STARTUP_GRACE_PER_LINE_S = 8.0  # ...a spoken line waits up to this for the server
+_PROCESS_STARTED = time.monotonic()
+
+
+def _shell_manages_server() -> bool:
+    return os.environ.get(SHELL_MANAGED_ENV) == "1"
 
 _CREATE_NO_WINDOW = 0x08000000
 
@@ -189,6 +214,16 @@ def _launch_gpt_sovits() -> subprocess.Popen | None:
         return None
 
 
+async def _wait_for_health(timeout: float, interval: float = 0.5) -> bool:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while True:
+        if await health():
+            return True
+        if asyncio.get_running_loop().time() >= deadline:
+            return False
+        await asyncio.sleep(interval)
+
+
 async def ensure_server() -> bool:
     """Make the TTS server available if it can be. Returns whether it is up.
 
@@ -200,6 +235,17 @@ async def ensure_server() -> bool:
         return True
 
     launch = dict(CONFIG.tts.gpt_sovits.launch or {})
+    if _shell_manages_server():
+        timeout = float(launch.get("startup_timeout_s", 120))
+        up = await _wait_for_health(timeout, interval=1.0)
+        print(
+            "[yuri] gpt_sovits: the shell's server is up"
+            if up
+            else f"[yuri] gpt_sovits: the shell's server still isn't listening after {timeout:.0f}s -- using pyttsx3",
+            file=sys.stdout if up else sys.stderr,
+            flush=True,
+        )
+        return up
     if not launch.get("enabled", False):
         print(
             "[yuri] gpt_sovits: not running and launch is disabled -- voice falls "

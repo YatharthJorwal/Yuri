@@ -14,7 +14,7 @@ import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const testsDir = join(root, "tests-fe");
-const outDir = join(root, "node_modules", ".cache", "luna-fe-tests");
+const outDir = join(root, "node_modules", ".cache", "yuri-fe-tests");
 
 const files = readdirSync(testsDir).filter((f) => f.endsWith(".test.mjs"));
 if (files.length === 0) {

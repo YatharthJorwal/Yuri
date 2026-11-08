@@ -2,7 +2,7 @@
 
 Drop your `.vrma` clips here. The shell looks for clips by name (idle, nod,
 think, happy, angry, sad, surprised, and the `world-*` set), so keep the
-Luna-era filenames unless you also update `src/main.ts`.
+the existing filenames unless you also update `src/main.ts`.
 
 If this directory is empty, the avatar still loads but has no clip-based
 animation: the procedural idle (breathing, sway, blink, gaze) in

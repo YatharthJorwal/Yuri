@@ -53,7 +53,7 @@ def test_youre_and_dash_both_apply_in_one_pass():
 # Phase 4's tools was found, live on the user's own machine, to actively
 # suppress capture_screen/read_clipboard tool use -- an isolated raw
 # Ollama call with the real tool schemas and no system prompt called
-# capture_screen correctly; the same call through Luna's real system
+# capture_screen correctly; the same call through Yuri's real system
 # prompt never called any tool across several real attempts. Fixed by
 # telling her plainly she has these two real tools and should use them,
 # while keeping the "no mouse/keyboard/code/files" boundary for

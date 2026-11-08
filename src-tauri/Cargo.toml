@@ -24,6 +24,11 @@ serde_json = "1"
 [target.'cfg(windows)'.dependencies]
 win32job = "2"
 
+[profile.dev]
+# Full debug info is what makes src-tauri/target balloon to several GB (and slows the
+# link step). Line tables keep readable backtraces at a fraction of the size.
+debug = "line-tables-only"
+
 [profile.release]
 # Small footprint matters here -- this runs alongside a game.
 lto = true

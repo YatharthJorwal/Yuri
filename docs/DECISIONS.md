@@ -502,6 +502,57 @@ paths. `git mv` was used so history follows the files.
 
 ---
 
+## D-027 — Everything slow at boot starts at the same time
+
+**Decision.** The shell starts the orchestrator immediately, in parallel with
+GPT-SoVITS (it used to wait up to 60 s for GPT-SoVITS's port first). Because both
+the shell and `tts.py` know how to start GPT-SoVITS, the shell now sets
+`YURI_SHELL_STARTS_TTS=1` on the orchestrator; in that mode `tts.py` never launches
+a server, it waits for the shell's, and for the first 90 s a spoken line waits up to
+8 s for it rather than using the placeholder voice. Inside the orchestrator the
+chat-model warm-up, the speech-model load (new, `stt.warm_up_on_start`), the TTS
+check and the router start-up run concurrently. The frontend reconnects with a
+250 ms -> 2 s backoff instead of a flat 2 s.
+
+**Why.** Measured, not guessed: a warm `import app` is about 0.6 s, so the Python
+venv was not the problem. The window sat on "connecting" for as long as GPT-SoVITS
+took to load, because the orchestrator was queued behind it, and then the first
+spoken turn also paid for loading Whisper.
+
+**Rejected.** Letting the orchestrator own GPT-SoVITS (the shell's Job Object and
+quit handler already manage its lifetime); dropping the port wait without the
+env var (the Python side would have launched a second copy and fought for port
+9880).
+
+**Cost.** In the first ~30 s after boot the first voice line may be delayed a few
+seconds, or fall back to the placeholder voice if GPT-SoVITS is slower than that.
+The Rust change is syntax-checked but was not compiled in the environment it was
+written in; the first `tauri dev` is the real check.
+
+---
+
+## D-028 — Luna leftovers
+
+**Decision.** Deleted `src/camera-modes.ts` and `src/postfx.ts` (nothing imported
+them; `SCOPE.md` already listed Luna's sandbox as not ported). Renamed the stray
+Luna references in comments, strings and test fixtures. One was user-visible: the
+log panel labelled Yuri's lines "Luna:". The app icon (a neon cat), the tray
+camera-active icon and `favicon.png` are now the bunny portrait. The status dot
+became a flat SVG spinner (connecting / connected / listening / working).
+`npm run clean` and `npm run clean:all` remove regenerable build output; the Cargo
+dev profile uses line-table debug info so `src-tauri/target` is far smaller.
+
+**Left on purpose.** The Luna importer (`python -m memory --import-luna`), the
+GPT-SoVITS install path (`D:\AI\Project Luna\...` is a real folder on disk), and
+history in the docs.
+
+**Next candidates, not done because they run in the turn path and have no tests:**
+the driver/observer WebSocket protocol, `scene_state` and `surface` in
+`app.py` / `ws-client.ts` / `main.ts`. They exist for `sandbox.ts`, which is not in
+this repo, so there is only ever one driver.
+
+---
+
 ## Superseded / historical
 
 - **D-002 (first version).** "Groq is the cloud provider" was drafted before the

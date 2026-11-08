@@ -7,12 +7,12 @@ are accepted:
 - **v2** (what `config/config.example.yaml` documents): `providers`, `models`,
   `roles`, `routing`, `privacy`, `budget`, `voice`, `speech`, plus the v1
   sections.
-- **legacy** (what Luna wrote, and what the ported tests still use):
+- **legacy** (the original flat shape, which the older tests still use):
   `llm.base_url/model/api_style` inline, `stt`, `tts`, `memory.embedding`.
 
 Legacy files are derived into the v2 view rather than rejected, because the
 ported test suite and any existing user config must keep loading. The rule that
-matters (from Luna, kept): **every key has a code default**. A missing key is
+matters: **every key has a code default**. A missing key is
 never a startup crash.
 
 Search order when no path is given:
@@ -288,7 +288,7 @@ class LogsConfig:
     keep_files: int = 5
 
 
-# ─── v1 views (what the ported Luna modules read) ────────────────────────────
+# ─── v1 views (the flat shape the older modules read) ────────────────────────
 
 
 @dataclass(frozen=True)
@@ -351,6 +351,9 @@ class STTConfig:
     compute_type: str = "int8"
     language: str | None = "en"
     timeout_s: int = 20
+    # Load the model in the background at startup so the first voice turn doesn't
+    # pay for it. Turn off if you rarely use the mic and want the RAM back.
+    warm_up_on_start: bool = True
 
 
 @dataclass(frozen=True)

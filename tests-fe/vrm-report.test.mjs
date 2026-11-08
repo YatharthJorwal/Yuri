@@ -14,7 +14,7 @@ const expr = (expressionName, extra = {}) => ({
 function fakeVrm() {
   const names = ["aa", "ih", "ou", "ee", "oh", "blink", "happy", "angry", "sad", "relaxed", "surprised", "pout"];
   return {
-    meta: { metaVersion: "1", name: "Luna" },
+    meta: { metaVersion: "1", name: "Yuri" },
     expressionManager: {
       expressions: names.map((n) => expr(n, n === "happy" ? { overrideMouth: "blend" } : {})),
     },
@@ -26,7 +26,7 @@ function fakeVrm() {
 
 test("reports expressions, custom ones and which standard presets are absent", () => {
   const r = buildVrmReport(fakeVrm());
-  assert.match(r.text, /Luna \(VRM spec 1\)/);
+  assert.match(r.text, /Yuri \(VRM spec 1\)/);
   assert.match(r.text, /custom expressions: pout/);
   assert.match(r.text, /NOT present: .*blinkLeft/);
   assert.match(r.text, /happy\(mouth:blend/);

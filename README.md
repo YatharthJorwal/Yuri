@@ -76,7 +76,7 @@ the avatar still breathes, blinks and glances, because those are procedural.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest orchestrator -q   # 641
-npm run test:fe                                        # 49
+npm run test:fe                                        # 58
 npx tsc --noEmit
 npm run build
 ```

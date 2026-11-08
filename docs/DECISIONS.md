@@ -553,6 +553,25 @@ this repo, so there is only ever one driver.
 
 ---
 
+## D-029 — Frame from the model's top, and a doctor for "it doesn't load"
+
+**Decision.** The camera looks at the head bone and pans up only as far as needed to keep
+the model's highest point (bunny ears, a hat) in frame with 5 cm to spare, capped at 20 cm
+(`src/framing.ts`). Before, it looked at the head bone with a fixed offset, so anything
+taller than about 34 cm above the bone was cropped. `npm run doctor` (and a silent
+`predev` hook) checks the usual reasons the dev window does not load and prints the fix
+for each.
+
+**Why.** A fixed offset is right for exactly one model; Luna and any future avatar would
+have needed their own number. For the doctor: "it doesn't load" has several unrelated
+causes (a stale process holding port 1420, no venv, no avatar file, no backend in a plain
+browser tab) and they look identical from outside.
+
+**Cost.** Framing now reads the model's skinned bounding box once at boot (a few ms). The
+doctor adds about 100 ms to `npm run dev`; it never blocks the start.
+
+---
+
 ## Superseded / historical
 
 - **D-002 (first version).** "Groq is the cloud provider" was drafted before the

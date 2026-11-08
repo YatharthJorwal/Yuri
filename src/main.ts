@@ -7,6 +7,7 @@ import { WsClient, type ConnectionState, type SpeakMessage, type TranscriptMessa
 import { logVrmReport } from "./vrm-report";
 import { MicStream } from "./mic-stream";
 import { CameraInput } from "./camera";
+import { lookAtHeight } from "./framing";
 import { classifyFile, resizeImageToBase64Jpeg, readTextFile } from "./file-upload";
 import { IDLE_BONE_NAMES, applyIdleOffsets, idleOffsets } from "./idle-motion";
 import { BlinkController, GazeController, addHeadFollow, mulberry32, type GazeFrame } from "./eyes";
@@ -33,6 +34,11 @@ const CAMERA_FOV_DEGREES = 32;
 const CAMERA_DISTANCE_FROM_HEAD = 1.2;
 // Camera slightly above the head, not dead-center, so the model's own eyes are looking slightly down at the camera rather than straight at it -- this reads as a more natural, relaxed pose than a dead-on stare.
 const CAMERA_HEIGHT_OFFSET_FROM_HEAD = 0.05;
+// The camera looks at the head bone, then pans up just far enough to keep the tallest
+// point of the model (bunny ears, a hat) inside the frame with this much room to spare
+// (metres), but never more than CAMERA_MAX_RISE above the head bone. See framing.ts.
+const CAMERA_HEADROOM_ABOVE_MODEL = 0.05;
+const CAMERA_MAX_RISE = 0.2;
 
 // VRM's bind/rest pose is a T-pose by default (arms straight out to the
 // sides) -- that's normal for a skeleton's rest pose, not something wrong
@@ -208,12 +214,20 @@ async function boot(): Promise<void> {
     headWorldPosition.set(0, 1.4, 0);
     console.warn("[yuri] VRM has no head bone in its humanoid map -- using a fallback camera position");
   }
+  vrm.scene.updateMatrixWorld(true);
+  const modelTopY = new THREE.Box3().setFromObject(vrm.scene, true).max.y;
+  const lookAtY = lookAtHeight(headWorldPosition.y, modelTopY, {
+    distance: CAMERA_DISTANCE_FROM_HEAD,
+    fovDegrees: CAMERA_FOV_DEGREES,
+    headroom: CAMERA_HEADROOM_ABOVE_MODEL,
+    maxRise: CAMERA_MAX_RISE,
+  });
   camera.position.set(
     headWorldPosition.x,
-    headWorldPosition.y + CAMERA_HEIGHT_OFFSET_FROM_HEAD,
+    lookAtY + CAMERA_HEIGHT_OFFSET_FROM_HEAD,
     headWorldPosition.z + CAMERA_DISTANCE_FROM_HEAD,
   );
-  camera.lookAt(headWorldPosition);
+  camera.lookAt(headWorldPosition.x, lookAtY, headWorldPosition.z);
 
   function layout(): void {
     renderer.setSize(window.innerWidth, window.innerHeight);

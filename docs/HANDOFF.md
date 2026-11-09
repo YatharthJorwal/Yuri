@@ -19,7 +19,7 @@ HEAD: see `git log` (Phase 3 + layout change are one or two commits on top of `2
   need a real model (50-turn persona run, ambiguous-contradiction quality) are
   unmeasured.
 - **Phases 4-7**: scoped in `docs/phases/PHASE-*.md`, not started.
-- Tests: **641 pytest**, **58 frontend**, `tsc --noEmit`, `vite build`,
+- Tests: **641 pytest**, **65 frontend**, `tsc --noEmit`, `vite build`,
   `cargo check` all green.
 - `data/settings.json` does not exist yet: the API-model switch has never been
   flipped, so routing follows the config default (`shadow`).
@@ -82,11 +82,16 @@ HEAD: see `git log` (Phase 3 + layout change are one or two commits on top of `2
   together and sets `YURI_SHELL_STARTS_TTS=1`; `tts.py` then never launches a
   server. If you run the orchestrator by hand (no shell), leave that variable unset
   and `tts.ensure_server()` launches GPT-SoVITS itself as before.
-- **`npm run dev` only serves the page** (it is also what `tauri dev` runs first). In a plain
-  browser tab nothing starts the backend, so the spinner stays on "connecting" until you run
-  `orchestrator/app.py` yourself. `npm run doctor` explains why a dev window isn't loading
+- **Two dev commands (D-030).** `npm run dev` = backend + page (for a plain browser tab; it
+  reuses a backend already on 8765 and shuts its own down gracefully on Ctrl+C).
+  `npm run dev:ui` = page only, and is what `tauri dev` runs (`beforeDevCommand`), because the
+  shell starts the backend itself. `npm run doctor` explains why a dev window isn't loading
   (port 1420 taken, no `.venv`, no `public/vrm/yuri.vrm`, backend/Ollama down, no cargo); a
-  quiet version runs before every `npm run dev` and never blocks it.
+  quiet version runs before both dev commands and never blocks them.
+- **Status indicator is a heart** (`#status-orb` in `index.html`, styled in `style.css`):
+  connecting = arc chasing the outline, connected = lavender, listening = pink and beating,
+  working = fast arc. When editing `index.html` target elements by id: it has several
+  inline SVGs and a blind edit already hit the wrong one once (`tests-fe/index-html.test.mjs`).
 - **First `tauri dev` after the D-028 update recompiles every Rust crate** (the Cargo dev
   profile changed); expect a few minutes once, fast after.
 - **Disk:** `npm run clean` (dist, caches) and `npm run clean:all` (also the Rust
@@ -130,7 +135,7 @@ HEAD: see `git log` (Phase 3 + layout change are one or two commits on top of `2
 ```powershell
 cd D:\AI\Yuri
 .\.venv\Scripts\python.exe -m pytest orchestrator -q      # 641
-npm run test:fe                                            # 58
+npm run test:fe                                            # 65
 npm run build                                              # tsc + vite
 cargo check --manifest-path src-tauri\Cargo.toml
 .\.venv\Scripts\python.exe orchestrator\check.py --refresh # config, key, catalog, spend

@@ -106,8 +106,8 @@ export async function runChecks({ brief = false } = {}) {
       if (!(await portOpen(BACKEND_PORT)))
         add(
           "warn",
-          `the backend is not running on port ${BACKEND_PORT}. In a plain browser tab \`npm run dev\` only serves the page, so the spinner stays on \"connecting\"`,
-          "start it with:  .venv\\Scripts\\python orchestrator\\app.py   (or use `npm run tauri dev`, which starts it for you)",
+          `the backend is not running on port ${BACKEND_PORT}, so the page would sit on "connecting"`,
+          "run `npm run dev` (starts the backend and the page together) or `npm run tauri dev`",
         );
     });
     await guard(async () => {

@@ -193,17 +193,17 @@ body {
     box-shadow 200ms ease;
 }
 
-/* Status spinner (replaces the old dot). One SVG: a faint track plus an arc.
-   - default (backend not reachable yet): dim arc spinning slowly, so the
-     window reads as "starting up" instead of "broken";
-   - .connected: the arc closes into a calm lavender ring;
-   - .listening: pink ring with a soft ripple;
-   - .busy (a turn is in flight): arc spins fast. Combines with the above. */
+/* Status heart (replaces the old dot). One SVG heart drawn three times: a soft fill, a faint
+   outline track, and an arc that travels around the outline.
+   - default (backend not reachable yet): a short arc chases around the outline, so the window
+     reads as "starting up" instead of "broken";
+   - .connected: the arc closes into a calm lavender outline with a faint fill;
+   - .listening: pink, and the heart beats (lub-dub);
+   - .busy (a turn is in flight): the arc chases fast. Combines with the above. */
 #status-orb {
   flex: none;
-  position: relative;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   color: var(--orb-offline);
   transition: color 250ms ease;
 }
@@ -212,13 +212,22 @@ body {
   display: block;
   width: 100%;
   height: 100%;
-  animation: orb-spin 1.6s linear infinite;
+  overflow: visible;
+  transform-origin: 50% 55%;
 }
 
-#status-orb circle {
+#status-orb path {
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.6;
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+
+#status-orb .orb-fill {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0;
+  transition: opacity 400ms ease;
 }
 
 #status-orb .orb-track {
@@ -228,8 +237,7 @@ body {
 #status-orb .orb-arc {
   stroke-linecap: round;
   stroke-dasharray: 26 74;
-  transform: rotate(-90deg);
-  transform-origin: 50% 50%;
+  animation: orb-trace 1.8s linear infinite;
   transition: stroke-dasharray 400ms ease;
 }
 
@@ -241,24 +249,22 @@ body {
   color: var(--orb-listening);
 }
 
-#status-orb.connected svg,
-#status-orb.listening svg {
-  animation: none;
-}
-
 #status-orb.connected .orb-arc,
 #status-orb.listening .orb-arc {
   stroke-dasharray: 100 0;
+  animation: none;
 }
 
-#status-orb.listening::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 2px solid currentColor;
-  opacity: 0;
-  animation: orb-ripple 1.8s ease-out infinite;
+#status-orb.connected .orb-fill {
+  opacity: 0.28;
+}
+
+#status-orb.listening .orb-fill {
+  opacity: 0.5;
+}
+
+#status-orb.listening svg {
+  animation: orb-beat 1.3s ease-in-out infinite;
 }
 
 #status-orb.busy {
@@ -266,41 +272,47 @@ body {
 }
 
 #status-orb.busy svg {
-  animation: orb-spin 0.9s linear infinite;
+  animation: none;
 }
 
 #status-orb.busy .orb-arc {
   stroke-dasharray: 30 70;
+  animation: orb-trace 0.9s linear infinite;
 }
 
-#status-orb.busy::after {
-  animation: none;
-  opacity: 0;
+#status-orb.busy .orb-fill {
+  opacity: 0.15;
 }
 
-@keyframes orb-spin {
+@keyframes orb-trace {
   to {
-    transform: rotate(360deg);
+    stroke-dashoffset: -100;
   }
 }
 
-@keyframes orb-ripple {
-  0% {
-    transform: scale(0.8);
-    opacity: 0.55;
-  }
+@keyframes orb-beat {
+  0%,
   100% {
-    transform: scale(1.7);
-    opacity: 0;
+    transform: scale(1);
+  }
+  14% {
+    transform: scale(1.2);
+  }
+  28% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.13);
+  }
+  70% {
+    transform: scale(1);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #status-orb svg,
-  #status-orb.busy svg {
-    animation: none;
-  }
-  #status-orb.listening::after {
+  #status-orb .orb-arc,
+  #status-orb.busy .orb-arc,
+  #status-orb.listening svg {
     animation: none;
   }
 }

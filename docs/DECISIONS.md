@@ -572,6 +572,28 @@ doctor adds about 100 ms to `npm run dev`; it never blocks the start.
 
 ---
 
+## D-030 — `npm run dev` runs the whole thing; the shell gets `dev:ui`
+
+**Decision.** `npm run dev` starts the backend and vite together (`scripts/dev.mjs`), reuses a
+backend that is already listening on 8765, and on Ctrl+C asks it to shut down gracefully
+(POST `/shutdown`, so the session-end memory pass still runs) before force-killing it after
+8 s. `npm run dev:ui` is vite alone, and `tauri.conf.json`'s `beforeDevCommand` now points at
+it. The status indicator became a heart (connecting / connected / listening / working).
+
+**Why.** `npm run doctor` showed the real cause of "the page doesn't load": a plain browser tab
+never had a backend, so the indicator sat on "connecting" forever. The shell must not run the
+full-stack command, or two backends would fight over port 8765.
+
+**Rejected.** Detecting "am I under Tauri" through environment variables (undocumented
+across versions); having vite spawn the backend as a plugin (ties the backend's lifetime to the
+dev server's internals).
+
+**Cost.** Running `npm run dev` and `npm run tauri dev` together is still wrong (shared port
+1420); the doctor says so. The Windows tree-kill path (`taskkill /T`) was written but not run
+here; the POSIX path was (clean exit, ports released, no stray processes).
+
+---
+
 ## Superseded / historical
 
 - **D-002 (first version).** "Groq is the cloud provider" was drafted before the

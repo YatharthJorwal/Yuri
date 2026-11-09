@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "predev": "node scripts/doctor.mjs --brief",
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "predev:ui": "node scripts/doctor.mjs --brief",
+    "dev:ui": "vite",
     "doctor": "node scripts/doctor.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",

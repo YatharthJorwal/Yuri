@@ -40,11 +40,14 @@ npm install
 # 4. Config (optional -- the example is used verbatim when this is absent)
 Copy-Item config\config.example.yaml config\config.yaml
 
-# 5. Run
-npm run tauri dev
+# 5. Run (pick one)
+npm run tauri dev     # the desktop shell; it starts the backend itself
+npm run dev           # a plain browser tab at http://localhost:1420: starts the backend AND the page
+npm run doctor        # if a window does not load: tells you why and how to fix it
 ```
 
-The orchestrator starts with the shell; it is not a separate command. It needs
+In the shell the orchestrator starts with the window; it is not a separate command.
+Do not run `npm run dev` and `npm run tauri dev` at the same time (they share port 1420). It needs
 Ollama running with `qwen3.5:9b` (and `qwen3.5:4b`, `nomic-embed-text` for the
 classifier and memory). GPT-SoVITS is launched by the orchestrator once the
 Phase 2 launcher lands; until then TTS falls back to `pyttsx3` and says so in
@@ -76,7 +79,7 @@ the avatar still breathes, blinks and glances, because those are procedural.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest orchestrator -q   # 641
-npm run test:fe                                        # 58
+npm run test:fe                                        # 65
 npx tsc --noEmit
 npm run build
 ```
